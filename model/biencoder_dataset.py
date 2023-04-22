@@ -32,25 +32,32 @@ class BiEncoderDataset(Dataset):
         self.querys = None
         self.evidences = None
 
+
     def __len__(self):
         return (len(self.raw_data))
+
 
     def __getitem__(self, idx):
         data = self.claim_data.iloc[idx]
         sample = BiencoderSample()
         
-        query = self.tokenizer.encode(text=data["claim_text"],
+        claim_text = self.clean_text(data["claim_text"])
+        
+        query = self.tokenizer.encode(text=claim_text,
                                       add_special_tokens=True,
                                       padding='max_length',
                                       max_length=self.max_padding_length,
                                       return_tensors='pt')
+        
+        
+        evidences_text = [self.clean_text(evidence) for evidence in data["evidences"]]
         
         posivite_evidence = [self.tokenizer.encode(text=evidence,
                                                    add_special_tokens=True,
                                                    padding='max_length',
                                                    max_length=self.max_padding_length,
                                                    return_tensors='pt')
-                             for evidence in data["evidences"]]
+                             for evidence in evidences_text]
         
         negtive_evidence = self.evidences.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
         
@@ -81,7 +88,13 @@ class BiEncoderDataset(Dataset):
         
         self.claim_data = pd.json_normalize(normalized_claim_data)
         self.evidences_data = pd.json_normalize(normalized_evidence_data)
+    
+    
+    def clean_text(self, context: str) -> str:
+        context = context.replace("`", "'")
+        context = context.replace(" 's", "'s")
         
+        return context
         
 class BiencoderSample(object):
     def __init__(self, 
