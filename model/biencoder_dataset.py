@@ -1,11 +1,16 @@
 import json
 import pandas as pd
+import torch
+from torch import Tensor as T
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
-from typing import List
+from collections import namedtuple
 
  # TO-Do
  # create method to process text: remove some symbols   
+BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'positive_evid', 'negative_evid'])
+BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
+PADDING_TENSOR_ELEMENT = -1
 
 class BiEncoderDataset(Dataset):
     def __init__(self,
@@ -15,6 +20,8 @@ class BiEncoderDataset(Dataset):
                  max_padding_length: int=12,
                  neg_evidence_num: int=2,
                  rand_seed: int=None) -> None:
+        
+        super(BiEncoderDataset, self).__init__() 
         
         self.claim_file_path = claim_file_path
         self.evidence_file_path = evidence_file_path
@@ -28,45 +35,57 @@ class BiEncoderDataset(Dataset):
         self.raw_claim_data = None
         self.raw_evidence_data = None
         
-        self.id_labels = None
-        self.querys = None
-        self.evidences = None
+        self.claim_data = None
+        self.evidences_data = None
+        
+        self.load_data()
 
 
     def __len__(self):
-        return (len(self.raw_data))
+        return (len(self.raw_claim_data))
 
 
     def __getitem__(self, idx):
         data = self.claim_data.iloc[idx]
-        sample = BiencoderSample()
         
         claim_text = self.clean_text(data["claim_text"])
         
-        query = self.tokenizer.encode(text=claim_text,
-                                      add_special_tokens=True,
-                                      padding='max_length',
-                                      max_length=self.max_padding_length,
-                                      return_tensors='pt')
+        query = self.tokenizer(text=claim_text,
+                               add_special_tokens=True,
+                               padding='max_length',
+                               truncation="longest_first",
+                               max_length=self.max_padding_length,
+                               return_tensors='pt')
         
+        query = BiEncoderPassage(query.input_ids, 
+                                 query.token_type_ids,
+                                 query.attention_mask)
         
-        evidences_text = [self.clean_text(evidence) for evidence in data["evidences"]]
+        positive_evidences_text = [self.clean_text(evidence) for evidence in data["evidences"]]
+        positive_evidence = self.tokenizer(text=positive_evidences_text,
+                                           add_special_tokens=True,
+                                           padding='max_length',
+                                           truncation="longest_first",
+                                           max_length=self.max_padding_length,
+                                           return_tensors='pt')
+        padded_positive_evidence = self.pad_tensor(positive_evidence)
+        padded_positive_evidence = BiEncoderPassage(padded_positive_evidence.input_ids, 
+                                                    padded_positive_evidence.token_type_ids, 
+                                                    padded_positive_evidence.attention_mask)
         
-        posivite_evidence = [self.tokenizer.encode(text=evidence,
-                                                   add_special_tokens=True,
-                                                   padding='max_length',
-                                                   max_length=self.max_padding_length,
-                                                   return_tensors='pt')
-                             for evidence in evidences_text]
-        
-        negtive_evidence = self.evidences.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
-        
-    
-        sample.query = query
-        sample.positive_evidence = posivite_evidence
-        sample.negative_evidence = negtive_evidence    
-        
-        return sample
+        negative_evidence_sample = self.evidences_data.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
+        negative_evidence_text = [self.clean_text(neg_evidence) for neg_evidence in negative_evidence_sample]
+        negative_evidence = self.tokenizer(text=negative_evidence_text,
+                                           add_special_tokens=True,
+                                           padding='max_length',
+                                           truncation="longest_first",
+                                           max_length=self.max_padding_length,
+                                           return_tensors='pt')
+        negative_evidence = BiEncoderPassage(negative_evidence.input_ids, 
+                                             negative_evidence.token_type_ids, 
+                                             negative_evidence.attention_mask)
+
+        return BiEncoderSample(query, padded_positive_evidence, negative_evidence)
     
     
     def load_data(self) -> None:
@@ -88,22 +107,31 @@ class BiEncoderDataset(Dataset):
         
         self.claim_data = pd.json_normalize(normalized_claim_data)
         self.evidences_data = pd.json_normalize(normalized_evidence_data)
-    
-    
+        self.max_evidence_num = self.claim_data["evidences"].apply(lambda x: len(x)).max()
+        
+        
     def clean_text(self, context: str) -> str:
         context = context.replace("`", "'")
         context = context.replace(" 's", "'s")
         
         return context
-        
-class BiencoderSample(object):
-    def __init__(self, 
-                 query: str=None,
-                 positive_evidences: List[str]=None,
-                 negative_evidence: List[str]=None) -> None:
-        
-        self.query = query
-        self.positive_evidence = positive_evidences
-        self.negative_evidence = negative_evidence
     
     
+    def pad_tensor(self, evidence: T):
+        
+        input_ids = evidence.input_ids
+        segments = evidence.token_type_ids
+        attn_mask = evidence.attention_mask
+        
+        if self.max_evidence_num == input_ids.shape[0]:
+            return evidence
+        else:
+            pad_tensor_num = self.max_evidence_num - input_ids.shape[0] 
+            
+            pad_tensor = torch.full((pad_tensor_num, self.max_padding_length), PADDING_TENSOR_ELEMENT)
+            
+            evidence.input_ids = torch.cat((input_ids, pad_tensor), dim=0)
+            evidence.token_type_ids = torch.cat((segments, pad_tensor), dim=0)
+            evidence.attention_mask = torch.cat((attn_mask, pad_tensor), dim=0)
+            
+            return evidence
