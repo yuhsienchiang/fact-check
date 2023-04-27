@@ -42,8 +42,9 @@ class BiEncoderTrainer():
             for index, sample_batch in enumerate(train_dataloader):
                 
                 query = sample_batch.query
-                positive_evid = sample_batch.positive_evid
-                negative_evid = sample_batch.negative_evid
+                evid = sample_batch.evid
+                
+                self.model(query.input_ids)
                 
                 loss = loss_func(query_input_ids=query.input_ids,
                                  positive_evidence_input_ids=positive_evid.input_ids,
@@ -60,21 +61,29 @@ class BiEncoderTrainer():
         return self.negative_likelihood_loss
     
     
-    def negative_likelihood_loss(self, query_input_ids, positive_evidence_input_ids, negative_input_ids):
+    def negative_likelihood_loss(self, query_vector, evidence_vector, position_idx):
         
-        positive_score = self.dot_similarity(query_input_ids, positive_evidence_input_ids)
-        negative_score = self.dot_similarity(query_input_ids, negative_input_ids)
+        similarity_score = self.dot_similarity(query_vec=query_vector, evidence_vec=evidence_vector)
         
-        log_softmax_score = F.log_softmax(torch.stack(positive_score, negative_score), dim=0)
+        expo_similarity_score = torch.exp(similarity_score)
         
-        return F.nll_loss(log_softmax_score, target=[], reduction='mean')
+        positive_mask = torch.zeros_like(similarity_score)
         
+        for i in range(similarity_score.size(0)):
+            start = position_idx[i, 0]
+            end = position_idx[i, 1]
+            expo_similarity_score[i, start:end, :] = 0
+            positive_mask[i, :start, :] = 1
+            
+            log_softmax_score = -torch.log(expo_similarity_score / expo_similarity_score.sum(dim=1).unsqueeze(1).expand(expo_similarity_score.shape))
+            log_softmax_score[log_softmax_score == torch.inf] = 0
         
-    
+        return (log_softmax_score * positive_mask).mean()
+        
     
     def dot_similarity(self, query_vec: T, evidence_vec: T):
-        similarity = torch.matmul(query_vec, evidence_vec)
-        return similarity
+        return torch.matmul(evidence_vec, query_vec.transpose(dim0=1, dim1=2))
+
         
         
     
