@@ -3,7 +3,7 @@ from typing import Tuple
 import torch
 from torch import nn
 from torch import Tensor as T
-from bert_encoder import BertEncoder
+from .bert_encoder import BertEncoder
 
 class BiEncoder(nn.Module):
     def __init__(self, query_model: BertEncoder, evid_model: BertEncoder) -> None:
