@@ -8,9 +8,10 @@ from .bert_encoder import BertEncoder
 class BiEncoder(nn.Module):
     def __init__(self, query_model: BertEncoder, evid_model: BertEncoder) -> None:
         super(BiEncoder, self).__init__()
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
-        self.query_model = query_model
-        self.evid_model = evid_model
+        self.query_model = query_model.to(device)
+        self.evid_model = evid_model.to(device)
         
     def forward(self, query_ids, query_segment, query_attn_mask, evid_ids, evid_segment, evid_attn_mask) -> Tuple[T, T]:
         
