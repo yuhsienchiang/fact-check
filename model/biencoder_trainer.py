@@ -55,7 +55,7 @@ class BiEncoderTrainer():
                 # forward pass the input through the biencoder model 
                 query_vector, evid_vector = self.model(query_ids=query.input_ids,
                                                        query_segment=query.segments,
-                                                       auery_attn_mask=query.attn_mask,
+                                                       query_attn_mask=query.attn_mask,
                                                        evid_ids=evid.input_ids,
                                                        evid_segment=evid.segments,
                                                        evid_attn_mask=evid.attn_mask)
