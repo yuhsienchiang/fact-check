@@ -74,7 +74,7 @@ class BiEncoderTrainer():
                 if index_batch % 10 == 0:
                     current = (index_batch + 1) * len(sample_batch)
                     print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
-                    batch_loss.append(loss)
+                    batch_loss.append(float(loss))
             
             train_loss_history.append(batch_loss)
             print()

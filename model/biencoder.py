@@ -60,7 +60,12 @@ class BiEncoder(nn.Module):
         hidden_state = out.hidden_states
         
         if sub_model.training:
-            sequence.requires_grad_(requires_grad=True)
-            pooler_output.requires_grad(requires_grad=True)
+            sequence.requires_grad = True
+            pooler_output.requires_grad = True
+        else:
+            sequence.requires_grad = False
+            pooler_output.requires_grad = False
+                
+        hidden_state.requires_grad = False
         
         return sequence, pooler_output, hidden_state
