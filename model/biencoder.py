@@ -26,19 +26,19 @@ class BiEncoder(nn.Module):
         
         return query_pooled_out, evid_pooled_out
     
-    def get_representation(sub_model: nn.Module, ids: T, segments: T, attent_mask: T) -> Tuple[T, T, T]:
+    def get_representation(self, sub_model: BertEncoder=None, ids: T=None, segments: T=None, attent_mask: T=None) -> Tuple[T, T, T]:
         # make sure the model is add_pooling_layer = True, return_dict=True
         
         if sub_model.training:
             out = sub_model(input_ids=ids,
                             token_type_ids=segments,
-                            attent_mask=attent_mask)
+                            attention_mask=attent_mask)
 
         else:
             with torch.no_grad():
                 out = sub_model(input_ids=ids,
                                 token_type_ids=segments,
-                                attent_mask=attent_mask)
+                                attention_mask=attent_mask)
         
         sequence = out.last_hidden_state
         pooled_output = out.pooled_output
