@@ -9,7 +9,7 @@ from collections import namedtuple
  # TO-Do
  # create method to process text: remove some symbols   
 BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'evid'])
-BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask', 'posit_neg_idx'])
+BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
 PADDING_TENSOR_ELEMENT = -1
 
 class BiEncoderDataset(Dataset):
@@ -60,19 +60,17 @@ class BiEncoderDataset(Dataset):
                                          max_length=self.max_padding_length,
                                          return_tensors='pt')
         # store claim tokens in namedtuple format
-        query_passage = BiEncoderPassage(query_tokenized.input_ids, 
-                                         query_tokenized.token_type_ids,
-                                         query_tokenized.attention_mask,
-                                         posit_neg_idx=torch.tensor([-1,-1]))
+        query_passage = BiEncoderPassage(input_ids=query_tokenized.input_ids, 
+                                         segments=query_tokenized.token_type_ids,
+                                         attn_mask=query_tokenized.attention_mask)
         
         # prepare positive evid text
-        positive_evid_textset = [self.clean_text(evidence) for evidence in data["evidences"]]
-        positive_evid_end_idx = len(positive_evid_textset)
-        positive_evid_textset = positive_evid_textset + ["[PAD]"] * (self.max_evidence_num - positive_evid_end_idx)
-        negative_evid_start_idx = len(positive_evid_textset)
+        positive_evid_textset = self.clean_text(data["evidences"])
+
         # prepare negative evid text
         negative_evid_sample = self.evidences_data.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
         negative_evid_textset = [self.clean_text(neg_evidence) for neg_evidence in negative_evid_sample]
+        
         # combine positive and negative evid into a single textset
         evid_textset = positive_evid_textset + negative_evid_textset
         
@@ -84,10 +82,9 @@ class BiEncoderDataset(Dataset):
                                         max_length=self.max_padding_length,
                                         return_tensors='pt')
         # store evidence token in namedtuple format
-        evidence_passage = BiEncoderPassage(evid_tokenized.input_ids,
-                                            evid_tokenized.token_type_ids,
-                                            evid_tokenized.attention_mask,
-                                            posit_neg_idx=torch.tensor([positive_evid_end_idx, negative_evid_start_idx]))
+        evidence_passage = BiEncoderPassage(input_ids=evid_tokenized.input_ids,
+                                            segments=evid_tokenized.token_type_ids,
+                                            attn_mask=evid_tokenized.attention_mask)
 
         return BiEncoderSample(query_passage, evidence_passage)
     
@@ -97,12 +94,13 @@ class BiEncoderDataset(Dataset):
         self.raw_evidence_data = json.load(open(self.evidence_file_path))
         
         
-        normalized_claim_data = [{"tag": key, 
+        normalized_claim_data = [{"tag": key,
                                   "claim_text": value["claim_text"],
                                   "claim_label": value["claim_label"],
-                                  "evidences": list(map(self.raw_evidence_data.get, value["evidences"]))
-                                 }
-                                 for (key, value) in self.raw_claim_data.items()]
+                                  "evidence": evid[0]
+                                  } 
+                                 for (key, value) in self.raw_claim_data.items()
+                                 for evid in list(map(self.raw_evidence_data.get, value["evidences"]))]
         
         normalized_evidence_data = [{"tag": key, 
                                      "evidences": value
@@ -111,7 +109,6 @@ class BiEncoderDataset(Dataset):
         
         self.claim_data = pd.json_normalize(normalized_claim_data)
         self.evidences_data = pd.json_normalize(normalized_evidence_data)
-        self.max_evidence_num = self.claim_data["evidences"].apply(lambda x: len(x)).max()
         
         
     def clean_text(self, context: str) -> str:
@@ -120,22 +117,3 @@ class BiEncoderDataset(Dataset):
         
         return context
     
-    
-    def pad_tensor(self, evidence: T):
-        
-        input_ids = evidence.input_ids
-        segments = evidence.token_type_ids
-        attn_mask = evidence.attention_mask
-        
-        if self.max_evidence_num == input_ids.shape[0]:
-            return evidence
-        else:
-            pad_tensor_num = self.max_evidence_num - input_ids.shape[0] 
-            
-            pad_tensor = torch.full((pad_tensor_num, self.max_padding_length), PADDING_TENSOR_ELEMENT)
-            
-            evidence.input_ids = torch.cat((input_ids, pad_tensor), dim=0)
-            evidence.token_type_ids = torch.cat((segments, pad_tensor), dim=0)
-            evidence.attention_mask = torch.cat((attn_mask, pad_tensor), dim=0)
-            
-            return evidence
