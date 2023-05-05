@@ -2,13 +2,13 @@ import torch
 from torch import Tensor as T
 from torch.utils.data import DataLoader
 
-from .biencoder import BiEncoder
-from .biencoder_dataset import BiEncoderDataset
+from .siamese_network import SiameseNetwork
+from .siamese_dataset import SiameseDataset 
 
 
 class BiEncoderTrainer():
     def __init__(self, 
-                 model:BiEncoder=None, 
+                 model: SiameseNetwork=None, 
                  optimizer: str=None, 
                  loss_func: str=None,
                  batch_size: int=64) -> None:
@@ -22,7 +22,7 @@ class BiEncoderTrainer():
 
     
     def train(self, 
-              train_data: BiEncoderDataset=None, 
+              train_data: SiameseDataset=None, 
               max_epoch: int=10, 
               loss_func_type: str=None, 
               optimizer_type: str=None, 
@@ -81,7 +81,7 @@ class BiEncoderTrainer():
                 # print info and store history
                 if index_batch % 10 == 0:
                     current = (index_batch + 1) * len(sample_batch)
-                    print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                    print(f"batch: {index_batch + 1:>2}; loss: {loss:>7f};  [{current:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
             
             train_loss_history.append(batch_loss)

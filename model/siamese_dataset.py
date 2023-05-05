@@ -8,11 +8,11 @@ from collections import namedtuple
 
  # TO-Do
  # create method to process text: remove some symbols   
-BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'evid'])
-BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask', 'posit_neg_idx'])
+SiameseSample = namedtuple('SiameseSample', ['query', 'evid'])
+SiamesePassage = namedtuple('SiamesePassage', ['input_ids', 'segments', 'attn_mask', 'posit_neg_idx'])
 PADDING_TENSOR_ELEMENT = -1
 
-class BiEncoderDataset(Dataset):
+class SiameseDataset(Dataset):
     def __init__(self,
                  claim_file_path: str,
                  evidence_file_path: str=None,
@@ -21,7 +21,7 @@ class BiEncoderDataset(Dataset):
                  neg_evidence_num: int=2,
                  rand_seed: int=None) -> None:
         
-        super(BiEncoderDataset, self).__init__() 
+        super(SiameseDataset, self).__init__() 
         
         self.claim_file_path = claim_file_path
         self.evidence_file_path = evidence_file_path
@@ -60,7 +60,7 @@ class BiEncoderDataset(Dataset):
                                          max_length=self.max_padding_length,
                                          return_tensors='pt')
         # store claim tokens in namedtuple format
-        query_passage = BiEncoderPassage(query_tokenized.input_ids, 
+        query_passage = SiamesePassage(query_tokenized.input_ids, 
                                          query_tokenized.token_type_ids,
                                          query_tokenized.attention_mask,
                                          posit_neg_idx=torch.tensor([-1,-1]))
@@ -84,12 +84,12 @@ class BiEncoderDataset(Dataset):
                                         max_length=self.max_padding_length,
                                         return_tensors='pt')
         # store evidence token in namedtuple format
-        evidence_passage = BiEncoderPassage(evid_tokenized.input_ids,
+        evidence_passage = SiamesePassage(evid_tokenized.input_ids,
                                             evid_tokenized.token_type_ids,
                                             evid_tokenized.attention_mask,
                                             posit_neg_idx=torch.tensor([positive_evid_end_idx, negative_evid_start_idx]))
 
-        return BiEncoderSample(query_passage, evidence_passage)
+        return SiameseSample(query_passage, evidence_passage)
     
     
     def load_data(self) -> None:
