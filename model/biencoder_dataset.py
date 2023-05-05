@@ -65,14 +65,14 @@ class BiEncoderDataset(Dataset):
                                          attn_mask=query_tokenized.attention_mask)
         
         # prepare positive evid text
-        positive_evid_textset = self.clean_text(data["evidences"])
+        positive_evid_textset = self.clean_text(data["evidence"])
 
         # prepare negative evid text
         negative_evid_sample = self.evidences_data.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
         negative_evid_textset = [self.clean_text(neg_evidence) for neg_evidence in negative_evid_sample]
         
         # combine positive and negative evid into a single textset
-        evid_textset = positive_evid_textset + negative_evid_textset
+        evid_textset = [positive_evid_textset] + negative_evid_textset
         
         # tokenized evidence text
         evid_tokenized = self.tokenizer(text=evid_textset,
