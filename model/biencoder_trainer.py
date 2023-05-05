@@ -19,7 +19,8 @@ class BiEncoderTrainer():
 
     
     def train(self, 
-              train_data: BiEncoderDataset=None, 
+              train_data: BiEncoderDataset=None,
+              shuffle: bool=True,
               max_epoch: int=10, 
               loss_func_type: str=None,
               similarity_func_type : str=None,
@@ -28,7 +29,7 @@ class BiEncoderTrainer():
         
         # setup dataloader
         self.train_data = train_data
-        train_dataloader = DataLoader(self.train_data, batch_size=self.batch_size)
+        train_dataloader = DataLoader(self.train_data, batch_size=self.batch_size, shuffle=shuffle, num_workers=2)
         size = len(self.train_data)
         
         # set model to training mode
@@ -38,7 +39,7 @@ class BiEncoderTrainer():
         self.similarity_func_type = similarity_func_type if similarity_func_type else "dot"
         self.loss_func_type = loss_func_type if loss_func_type else "nll_loss"
         
-        loss_func = self.select_loss_func(self.similarity_func_type)
+        loss_func = self.select_loss_func(self.loss_func_type)
         
         # initialize optimizer
         self.optimizer = optimizer_type if optimizer_type else self.optimizer
@@ -70,8 +71,7 @@ class BiEncoderTrainer():
                 
                 # calculate the loss
                 loss = loss_func(query_vector=query_vector.to(self.device),
-                                 evidence_vector=evid_vector.to(self.device),
-                                 position_idx=evid.posit_neg_idx.to(self.device))
+                                 evidence_vector=evid_vector.to(self.device))
 
                 # backpropadation
                 optimizer.zero_grad()
@@ -126,7 +126,7 @@ class BiEncoderTrainer():
     
     def negative_likelihood_loss(self, query_vector: T, evidence_vector: T):
         
-        similarity_func = self.select_similarity_func(self.similarity_func)
+        similarity_func = self.select_similarity_func(self.similarity_func_type)
         
         # ensure the vectors only has 2 dim
         if len(query_vector.shape) == 3:
@@ -139,7 +139,7 @@ class BiEncoderTrainer():
         
         num_query = len(query_vector)
         num_neg_evid = self.train_data.neg_evidence_num
-        is_positive = torch.arange(0, (num_neg_evid + 1 * num_query), (num_neg_evid + 1))
+        is_positive = torch.arange(0, (num_neg_evid + 1) * num_query, (num_neg_evid + 1)).to(self.device)
         
         log_softmax_score = F.log_softmax(similarity_score, dim=1)
         
