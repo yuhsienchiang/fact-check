@@ -95,7 +95,7 @@ class BiEncoderDataset(Dataset):
         normalized_claim_data = [{"tag": key,
                                   "claim_text": value["claim_text"],
                                   "claim_label": value["claim_label"],
-                                  "evidence": evid[0]
+                                  "evidence": evid
                                   } 
                                  for (key, value) in self.raw_claim_data.items()
                                  for evid in list(map(self.raw_evidence_data.get, value["evidences"]))]
