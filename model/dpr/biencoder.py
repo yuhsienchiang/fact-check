@@ -6,7 +6,7 @@ from torch import Tensor as T
 from .bert_encoder import BertEncoder
 
 class BiEncoder(nn.Module):
-    def __init__(self, query_model: BertEncoder, evid_model: BertEncoder=None) -> None:
+    def __init__(self, query_model: nn.Module, evid_model: nn.Module=None) -> None:
         super(BiEncoder, self).__init__()
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
