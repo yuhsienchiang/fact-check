@@ -16,7 +16,7 @@ class BiEncoderDataset(Dataset):
                  tokenizer: BertTokenizer=None,
                  lower_case :bool=False,
                  max_padding_length: int=12,
-                 evidence_num: int=2,
+                 evidence_num: int=None,
                  rand_seed: int=None) -> None:
         
         super(BiEncoderDataset, self).__init__() 
@@ -39,7 +39,7 @@ class BiEncoderDataset(Dataset):
         self.load_data()
         self.max_positive_num = self.raw_claim_data["evidences"].apply(lambda x: len(x)).max()
         
-        self.evidence_num = evidence_num if evidence_num >= self.max_positive_num else self.max_positive_num  + 3
+        self.evidence_num = evidence_num if (evidence_num is not None) and (evidence_num >= self.max_positive_num) else self.max_positive_num  + 3
 
 
     def __len__(self) -> int:
