@@ -4,7 +4,8 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from collections import namedtuple
 
-BertClassifierPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
+BertClassifierSample = namedtuple('BertClassifierSample', ['text_sequences', 'label'])
+BertClassifierPassage = namedtuple('BertClassifierPassage', ['input_ids', 'segments', 'attn_mask'])
 
 CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
 IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
@@ -61,11 +62,12 @@ class BertClassifierDataset(Dataset):
                                   max_length=self.max_padding_length,
                                   return_tensors="pt")
         
-        text_pair_passage = BertClassifierPassage(input_ids=encoding.input_ids,
-                                                  segments=encoding.token_type_ids,
-                                                  attn_mask=encoding.attention_mask)
+        text_sequences_passage = BertClassifierPassage(input_ids=encoding.input_ids,
+                                                       segments=encoding.token_type_ids,
+                                                       attn_mask=encoding.attention_mask)
         
-        return text_pair_passage, label
+        return BertClassifierSample(text_sequences=text_sequences_passage,
+                                    label=label)
     
     
     def load_data(self) -> None:
