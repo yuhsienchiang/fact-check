@@ -48,11 +48,13 @@ class BertClassifierDataset(Dataset):
         data = self.claim_data.iloc[idx]
         
         claim_text = self.clean_text(data["claim_text"], lower_case=self.lower_case)
-        evidence_text = self.clean_text(data["evidence"], lower_case=self.lower_case)
+        evidence_text = [self.clean_text(evid, self.lower_case) for evid in data["evidence"]]
+        
+        input_sequence = self.tokenizer.sep_token.join([claim_text] + evidence_text)
+
         label = CLASS_TO_IDX[data["claim_label"]]
         
-        encoding = self.tokenizer(text=claim_text,
-                                  text_pair=evidence_text,
+        encoding = self.tokenizer(text=input_sequence,
                                   add_special_tokens=True,
                                   padding="max_length",
                                   truncation="longest_first",
@@ -74,11 +76,10 @@ class BertClassifierDataset(Dataset):
         normalized_claim_data = [{"tag": key,
                                   "claim_text": value["claim_text"],
                                   "claim_label": value["claim_label"],
-                                  "evidence": evid
+                                  "evidence": list(map(self.raw_evidence_data.get, value["evidences"]))
                                   } 
-                                 for (key, value) in self.raw_claim_data.items()
-                                 for evid in list(map(self.raw_evidence_data.get, value["evidences"]))] 
-        
+                                 for (key, value) in self.raw_claim_data.items()] 
+                
         normalized_evidence_data = [{"tag": key, 
                                      "evidences": value
                                     } 
