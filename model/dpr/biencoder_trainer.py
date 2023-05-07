@@ -60,6 +60,7 @@ class BiEncoderTrainer():
                 
                 query = sample_batch.query
                 evid = sample_batch.evid
+                is_positive = sample_batch.is_positive
                 
                 # forward pass the input through the biencoder model 
                 query_vector, evid_vector = self.model(query_ids=query.input_ids.to(self.device),
@@ -113,18 +114,14 @@ class BiEncoderTrainer():
     
     def cosine_similarity(self, query_vec: T, evidence_vec: T, eps: float=1e-8):
         
-        dot_similarity = self.dot_similarity(query_vec=query_vec, evidence_vec=evidence_vec)
+        normalized_query_vec = F.normalize(query_vec, p=2, dim=1)
+        normalized_evidence_vec = F.normalize(evidence_vec, p=2, dim=1)
         
-        query_norm = torch.unflatten(torch.linalg.vector_norm(query_vec, dim=1), 0, (-1, 1))
-        evid_norm = torch.unflatten(torch.linalg.vector_norm(evidence_vec, dim=1), 0, (1, -1))
-        
-        norm_matrix = torch.matmul(query_norm, evid_norm)
-        norm_matrix[norm_matrix < eps] = eps
-        
-        return torch.div(dot_similarity, norm_matrix)
+        return self.dot_similarity(query_vec=normalized_query_vec,
+                                   evidence_vec=normalized_evidence_vec)
     
     
-    def negative_likelihood_loss(self, query_vector: T, evidence_vector: T):
+    def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive):
         
         similarity_func = self.select_similarity_func(self.similarity_func_type)
         
@@ -137,10 +134,19 @@ class BiEncoderTrainer():
         
         similarity_score = similarity_func(query_vec=query_vector, evidence_vec=evidence_vector)
         
-        num_query = len(query_vector)
-        num_neg_evid = self.train_data.neg_evidence_num
-        is_positive = torch.arange(0, (num_neg_evid + 1) * num_query, (num_neg_evid + 1)).to(self.device)
+        positive_mask = self.create_positive_mask(is_positive=is_positive, shape=similarity_score.shape)
         
         log_softmax_score = F.log_softmax(similarity_score, dim=1)
         
-        return F.nll_loss(log_softmax_score, target=is_positive, reduction="mean")    
+        return torch.mean(log_softmax_score * positive_mask)
+
+    
+    def create_positive_mask(self, is_positive, shape):
+        
+        mask = torch.zeros(shape)
+        
+        for idx, positive_end in enumerate(is_positive):
+            mask[idx, idx: idx+positive_end] = 1
+            
+        return mask
+        

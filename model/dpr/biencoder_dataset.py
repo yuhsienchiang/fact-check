@@ -4,7 +4,7 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from collections import namedtuple
 
-BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'evid'])
+BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'evid', 'is_positive'])
 BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
 PADDING_TENSOR_ELEMENT = -1
 
@@ -16,7 +16,7 @@ class BiEncoderDataset(Dataset):
                  tokenizer: BertTokenizer=None,
                  lower_case :bool=False,
                  max_padding_length: int=12,
-                 neg_evidence_num: int=2,
+                 evidence_num: int=2,
                  rand_seed: int=None) -> None:
         
         super(BiEncoderDataset, self).__init__() 
@@ -28,7 +28,6 @@ class BiEncoderDataset(Dataset):
         
         self.lower_case = lower_case
         self.max_padding_length = max_padding_length
-        self.neg_evidence_num = neg_evidence_num
         self.rand_seed = rand_seed
         
         self.raw_claim_data = None
@@ -38,6 +37,9 @@ class BiEncoderDataset(Dataset):
         self.evidences_data = None
         
         self.load_data()
+        self.max_positive_num = self.raw_claim_data["evidences"].apply(lambda x: len(x)).max()
+        
+        self.evidence_num = evidence_num if evidence_num >= self.max_positive_num else self.max_positive_num  + 3
 
 
     def __len__(self) -> int:
@@ -64,14 +66,16 @@ class BiEncoderDataset(Dataset):
                                          attn_mask=query_tokenized.attention_mask)
         
         # prepare positive evid text
-        positive_evid_textset = self.clean_text(data["evidence"], lower_case=self.lower_case)
-
+        positive_evid_textset = [self.clean_text(evid, self.lower_case) for evid in data["evidence"]]
+        is_positive = len(positive_evid_textset)
+        
         # prepare negative evid text
-        negative_evid_sample = self.evidences_data.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
+        negative_evid_sample = self.evidences_data.sample(n=self.max_positive_num-is_positive, 
+                                                          random_state=self.rand_seed)["evidences"].tolist()
         negative_evid_textset = [self.clean_text(neg_evidence, lower_case=self.lower_case) for neg_evidence in negative_evid_sample]
         
         # combine positive and negative evid into a single textset
-        evid_textset = [positive_evid_textset] + negative_evid_textset
+        evid_textset = positive_evid_textset + negative_evid_textset
         
         # tokenized evidence text
         evid_tokenized = self.tokenizer(text=evid_textset,
@@ -85,7 +89,9 @@ class BiEncoderDataset(Dataset):
                                             segments=evid_tokenized.token_type_ids,
                                             attn_mask=evid_tokenized.attention_mask)
 
-        return BiEncoderSample(query_passage, evidence_passage)
+        return BiEncoderSample(query=query_passage,
+                               evid=evidence_passage,
+                               is_positive=is_positive)
     
     
     def load_data(self) -> None:
