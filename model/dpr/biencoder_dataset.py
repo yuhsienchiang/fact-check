@@ -4,17 +4,17 @@ from torch.utils.data import Dataset
 from transformers import BertTokenizer
 from collections import namedtuple
 
- # TO-Do
- # create method to process text: remove some symbols   
 BiEncoderSample = namedtuple('BiEncoderSample', ['query', 'evid'])
 BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
 PADDING_TENSOR_ELEMENT = -1
+
 
 class BiEncoderDataset(Dataset):
     def __init__(self,
                  claim_file_path: str,
                  evidence_file_path: str=None,
                  tokenizer: BertTokenizer=None,
+                 lower_case :bool=False,
                  max_padding_length: int=12,
                  neg_evidence_num: int=2,
                  rand_seed: int=None) -> None:
@@ -26,6 +26,7 @@ class BiEncoderDataset(Dataset):
         
         self.tokenizer = tokenizer if tokenizer else BertTokenizer.from_pretrained("bert-base-uncased")
         
+        self.lower_case = lower_case
         self.max_padding_length = max_padding_length
         self.neg_evidence_num = neg_evidence_num
         self.rand_seed = rand_seed
@@ -39,7 +40,7 @@ class BiEncoderDataset(Dataset):
         self.load_data()
 
 
-    def __len__(self):
+    def __len__(self) -> int:
         return (len(self.raw_claim_data))
 
 
@@ -63,11 +64,11 @@ class BiEncoderDataset(Dataset):
                                          attn_mask=query_tokenized.attention_mask)
         
         # prepare positive evid text
-        positive_evid_textset = self.clean_text(data["evidence"])
+        positive_evid_textset = self.clean_text(data["evidence"], lower_case=self.lower_case)
 
         # prepare negative evid text
         negative_evid_sample = self.evidences_data.sample(n=self.neg_evidence_num, random_state=self.rand_seed)["evidences"].tolist()
-        negative_evid_textset = [self.clean_text(neg_evidence) for neg_evidence in negative_evid_sample]
+        negative_evid_textset = [self.clean_text(neg_evidence, lower_case=self.lower_case) for neg_evidence in negative_evid_sample]
         
         # combine positive and negative evid into a single textset
         evid_textset = [positive_evid_textset] + negative_evid_textset
@@ -109,9 +110,9 @@ class BiEncoderDataset(Dataset):
         self.evidences_data = pd.json_normalize(normalized_evidence_data)
         
         
-    def clean_text(self, context: str) -> str:
+    def clean_text(self, context: str, lower_case: bool=False) -> str:
         context = context.replace("`", "'")
         context = context.replace(" 's", "'s")
         
-        return context
+        return context.lower() if lower_case else context
     
