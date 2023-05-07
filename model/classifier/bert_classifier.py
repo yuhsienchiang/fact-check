@@ -3,6 +3,8 @@ from torch import Tensor as T
 from torch import nn
 from transformers import BertModel
 
+CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
+IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
 
 class BertClassifier(nn.Module):
     
@@ -16,14 +18,26 @@ class BertClassifier(nn.Module):
         self.linear_layer = nn.Linear(hidden_size, 4).to(device)
         
         
-    def forward(self, input_ids: T, attention_mask: T, return_dict: bool=True):
+    def forward(self, input_ids: T, token_type_ids: T, attention_mask: T, return_dict: bool=True):
         
         _sequence, pooler_out, _hidden = self.bert_layer(input_ids=input_ids,
+                                                         token_type_ids=token_type_ids,
                                                          attention_mask=attention_mask,
                                                          return_dict=return_dict)
         
         logit = self.linear_layer(pooler_out)
         
         return logit
+    
+    def predict(self, input_ids: T, attention_mask: T, return_dict: bool=True):
+        
+        self.eval()
+        logit = self.__call__(input_ids=input_ids, 
+                              attention_mask=attention_mask, 
+                              return_dict=return_dict)
+        
+        probability = nn.Softmax(logit, dim=1)
+        
+        return IDX_TO_CLASS[probability.argmax(1)]
         
        

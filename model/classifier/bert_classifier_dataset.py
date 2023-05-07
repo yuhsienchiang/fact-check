@@ -15,6 +15,7 @@ class BertClassifierDataset(Dataset):
                  claim_file_path: str,
                  evidence_file_path: str=None,
                  tokenizer: BertTokenizer=None,
+                 lower_case: bool=False,
                  max_padding_length: int=12,
                  rand_seed: int=None) -> None:
         
@@ -25,6 +26,7 @@ class BertClassifierDataset(Dataset):
         
         self.tokenizer = tokenizer if tokenizer else BertTokenizer.from_pretrained("bert-base-uncased")
         
+        self.lower_case = lower_case
         self.max_padding_length = max_padding_length
         self.rand_seed = rand_seed
         
@@ -37,7 +39,7 @@ class BertClassifierDataset(Dataset):
         self.load_data()
         
         
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.raw_claim_data)
     
     
@@ -45,8 +47,8 @@ class BertClassifierDataset(Dataset):
         
         data = self.claim_data.iloc[idx]
         
-        claim_text = self.clean_text(data["claim_text"])
-        evidence_text = self.clean_text(data["evidence"])
+        claim_text = self.clean_text(data["claim_text"], lower_case=self.lower_case)
+        evidence_text = self.clean_text(data["evidence"], lower_case=self.lower_case)
         label = CLASS_TO_IDX[data["claim_label"]]
         
         encoding = self.tokenizer(text=claim_text,
