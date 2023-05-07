@@ -2,6 +2,7 @@ import torch
 from torch import Tensor as T
 from torch import nn
 from transformers import BertModel
+from bert_classifier_dataset import BertClassifierPassage
 
 CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
 IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
@@ -32,16 +33,20 @@ class BertClassifier(nn.Module):
         logit = self.linear_output(x)
         
         return logit
+
+
+def predict(classifier: BertClassifier, x: BertClassifierPassage, return_type: str="idx"):
     
-    def predict(self, input_ids: T, attention_mask: T, return_dict: bool=True):
-        
-        self.eval()
-        logit = self.__call__(input_ids=input_ids, 
-                              attention_mask=attention_mask, 
-                              return_dict=return_dict)
-        
-        probability = nn.Softmax(logit, dim=1)
-        
-        return IDX_TO_CLASS[probability.argmax(1)]
-        
-       
+    classifier.eval()
+    
+    with torch.no_grad():
+        logit = classifier(input_ids=x.input_ids,
+                             token_type_ids=x.segments,
+                             attention_mask=x.attn_mask)
+
+    classifier.train()
+     
+    if return_type == 'prob':
+        return logit
+    else:
+        return torch.argmax(logit, dim=-1)
