@@ -3,7 +3,6 @@ from typing import Tuple
 import torch
 from torch import nn
 from torch import Tensor as T
-from .bert_encoder import BertEncoder
 
 class BiEncoder(nn.Module):
     def __init__(self, query_model: nn.Module, evid_model: nn.Module=None) -> None:
@@ -13,6 +12,7 @@ class BiEncoder(nn.Module):
         self.encoder_0 = query_model.to(device)
         self.encoder_1 = evid_model.to(device) if evid_model else None
         
+
     def forward(self, query_ids, query_segment, query_attn_mask, evid_ids, evid_segment, evid_attn_mask) -> Tuple[T, T]:
         
         input_shape = evid_ids.shape
@@ -47,8 +47,9 @@ class BiEncoder(nn.Module):
             evid_pooler_out = torch.unflatten(evid_pooler_out, 0, (batch_size, vec_num))
         
         return query_pooler_out, evid_pooler_out
+
     
-    def get_representation(self, sub_model: BertEncoder=None, ids: T=None, segments: T=None, attent_mask: T=None) -> Tuple[T, T, T]:
+    def get_representation(self, sub_model: nn.Module=None, ids: T=None, segments: T=None, attent_mask: T=None) -> Tuple[T, T, T]:
         # make sure the model is add_pooling_layer = True, return_dict=True
         
         if sub_model.training:
@@ -67,3 +68,35 @@ class BiEncoder(nn.Module):
         hidden_state = out.hidden_states
         
         return sequence, pooler_output, hidden_state
+    
+    
+    def encode_query(self, input_ids: T, segments: T, attent_mask: T):
+        
+        self.encoder_0.eval()
+        with torch.no_grad():
+            out = self.encoder_0(input_ids=input_ids,
+                                 token_type_ids=segments,
+                                 attention_mask=attent_mask)
+        
+        self.encoder_o.train()
+        return out.pooler_output
+
+    
+    def encode_evidence(self, input_ids: T, segments: T, attent_mask: T):
+        
+        if self.encoder_1 is not None:
+            
+            self.encoder_1.eval()
+            with torch.no_grad():
+                out = self.encoder_1(input_ids=input_ids,
+                                     token_type_ids=segments,
+                                     attention_mask=attent_mask)
+                
+                self.encoder_1.train()
+                return out.pooler_output
+            
+        else:
+            return self.encode_query(input_ids=input_ids,
+                                     segments=segments,
+                                     attent_mask=attent_mask)
+            
