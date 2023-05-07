@@ -1,5 +1,6 @@
 import torch
 from torch import Tensor as T
+from torch import nn
 from torch.utils.data import DataLoader
 
 from .bert_classifier import BertClassifier
@@ -37,10 +38,10 @@ class BertClassifierTrainer():
         loss_func = self.select_loss_func(self.loss_func_type)
         
                 # initialize optimizer
-        self.optimizer = optimizer_type if optimizer_type else self.optimizer
-        if self.optimizer == "adam":
+        self.optimizer_type = optimizer_type if optimizer_type else self.optimizer
+        if self.optimizer_type == "adam":
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
-        elif self.optimizer == "SGD":
+        elif self.optimizer_type == "SGD":
             optimizer = torch.optim.SGD(self.model.parameters(), lr=learning_rate)
         else:
             optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -53,9 +54,14 @@ class BertClassifierTrainer():
             batch_loss = []
             for index_batch, sample_batch in enumerate(train_dataloader):
                 
-                logit = self.classifier(sample_batch)
+                text_sequences = sample_batch.text_sequences
                 
-                loss = loss_func(logit)
+                logit = self.classifier(input_ids=text_sequences.input_ids,
+                                        token_type_ids=text_sequences.segments,
+                                        attention_mask=text_sequences.attn_mask,
+                                        return_dict=True)
+                
+                loss = loss_func(logit, sample_batch.label)
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -72,10 +78,11 @@ class BertClassifierTrainer():
         self.train_loss_history = train_loss_history
         print("Bert Classifier Training Complete!")
         return(train_loss_history)
-                
+
+
     def select_loss_func(self, loss_func_type: str):
         
         if loss_func_type == 'cross_entropy':
-            pass
+            return nn.CrossEntropyLoss()
         else:
             pass
