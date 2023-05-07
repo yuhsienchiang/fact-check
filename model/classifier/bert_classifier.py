@@ -15,7 +15,9 @@ class BertClassifier(nn.Module):
         
         self.bert_layer = BertModel.from_pretrained("bert-base-uncased").to(device)
         hidden_size = self.bert_layer.config.hidden_size
-        self.linear_layer = nn.Linear(hidden_size, 4).to(device)
+        self.linear_layer = nn.Linear(hidden_size, hidden_size).to(device)
+        self.activation = nn.Tanh()
+        self.linear_output = nn.Linear(hidden_size, 4)
         
         
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T, return_dict: bool=True):
@@ -25,7 +27,9 @@ class BertClassifier(nn.Module):
                                                          attention_mask=attention_mask,
                                                          return_dict=return_dict)
         
-        logit = self.linear_layer(pooler_out)
+        x = self.linear_layer(pooler_out)
+        x = self.activation(x)
+        logit = self.linear_output(x)
         
         return logit
     
