@@ -37,7 +37,7 @@ class BiEncoderDataset(Dataset):
         self.evidences_data = None
         
         self.load_data()
-        self.max_positive_num = self.raw_claim_data["evidences"].apply(lambda x: len(x)).max()
+        self.max_positive_num = self.claim_data["evidence"].apply(lambda x: len(x)).max()
         
         self.evidence_num = evidence_num if (evidence_num is not None) and (evidence_num >= self.max_positive_num) else self.max_positive_num  + 3
 

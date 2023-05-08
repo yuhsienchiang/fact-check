@@ -71,8 +71,9 @@ class BiEncoderTrainer():
                                                        evid_attn_mask=evid.attn_mask.to(self.device))
                 
                 # calculate the loss
-                loss = loss_func(query_vector=query_vector.to(self.device),
-                                 evidence_vector=evid_vector.to(self.device))
+                loss = loss_func(query_vector=query_vector.to("cpu"),
+                                 evidence_vector=evid_vector.to("cpu"),
+                                 is_positive=is_positive)
 
                 # backpropadation
                 optimizer.zero_grad()
@@ -121,7 +122,7 @@ class BiEncoderTrainer():
                                    evidence_vec=normalized_evidence_vec)
     
     
-    def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive):
+    def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive: T):
         
         similarity_func = self.select_similarity_func(self.similarity_func_type)
         
@@ -138,7 +139,7 @@ class BiEncoderTrainer():
         
         log_softmax_score = F.log_softmax(similarity_score, dim=1)
         
-        return torch.mean(log_softmax_score * positive_mask)
+        return torch.mean(log_softmax_score * positive_mask).to(self.device)
 
     
     def create_positive_mask(self, is_positive, shape):
