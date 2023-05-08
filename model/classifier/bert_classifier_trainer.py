@@ -34,17 +34,17 @@ class BertClassifierTrainer():
         
         self.classifier.train()
         
-        self.loss_func_type = loss_func_type if loss_func_type else ""
+        self.loss_func_type = loss_func_type
         loss_func = self.select_loss_func(self.loss_func_type)
         
-                # initialize optimizer
-        self.optimizer_type = optimizer_type if optimizer_type else self.optimizer
+        # initialize optimizer
+        self.optimizer_type = optimizer_type
         if self.optimizer_type == "adam":
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+            optimizer = torch.optim.Adam(self.classifier.parameters(), lr=learning_rate)
         elif self.optimizer_type == "SGD":
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=learning_rate)
+            optimizer = torch.optim.SGD(self.classifier.parameters(), lr=learning_rate)
         else:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+            optimizer = torch.optim.Adam(self.classifier.parameters(), lr=learning_rate)
         
         train_loss_history = []
         for epoch in range(max_epoch):
@@ -56,12 +56,12 @@ class BertClassifierTrainer():
                 
                 text_sequences = sample_batch.text_sequences
                 
-                logit = self.classifier(input_ids=text_sequences.input_ids,
-                                        token_type_ids=text_sequences.segments,
-                                        attention_mask=text_sequences.attn_mask,
+                logit = self.classifier(input_ids=text_sequences.input_ids.to(self.device),
+                                        token_type_ids=text_sequences.segments.to(self.device),
+                                        attention_mask=text_sequences.attn_mask.to(self.device),
                                         return_dict=True)
                 
-                loss = loss_func(logit, sample_batch.label)
+                loss = loss_func(logit.to(self.device), sample_batch.label.to(self.device))
                 
                 optimizer.zero_grad()
                 loss.backward()
