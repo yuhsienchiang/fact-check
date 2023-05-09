@@ -55,13 +55,16 @@ class BertClassifierTrainer():
             for index_batch, sample_batch in enumerate(train_dataloader):
                 
                 text_sequences = sample_batch.text_sequences
+                labels = sample_batch.label.to(self.device)
                 
                 logit = self.classifier(input_ids=text_sequences.input_ids.to(self.device),
                                         token_type_ids=text_sequences.segments.to(self.device),
                                         attention_mask=text_sequences.attn_mask.to(self.device),
                                         return_dict=True)
                 
-                loss = loss_func(logit.to(self.device), sample_batch.label.to(self.device))
+                logit = torch.flatten(logit, 0, 1).to(self.device)
+                
+                loss = loss_func(logit, labels)
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -71,6 +74,8 @@ class BertClassifierTrainer():
                     current = (index_batch + 1) * len(sample_batch)
                     print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
+                
+                del logit, loss
                 
             train_loss_history.append(batch_loss)
             print()
