@@ -57,13 +57,13 @@ class RerankerTrainer():
                 positive_passage = sample_batch.positive_passage
                 negative_passage = sample_batch.negative_passage
                 
-                labels = torch.zeros((len(positive_passage.input_ids) + len(negative_passage.input_ids), 1))
+                labels = [1] * len(positive_passage.input_ids) + [0] * len(negative_passage.input_ids)
                 labels[:len(positive_passage)] = 1
                 
-                logit = self.classifier(input_ids=torch.cat((positive_passage.input_ids, negative_passage.input_ids).to(self.device), dim=0),
-                                        token_type_ids=torch.cat((positive_passage.segments, negative_passage.segments).to(self.device), dim=0),
-                                        attention_mask=torch.cat((positive_passage.attn_mask, negative_passage.attn_mask).to(self.device), dim=0),
-                                        return_dict=True)
+                logit = self.reranker(input_ids=torch.cat([positive_passage.input_ids, negative_passage.input_ids], dim=0).to(self.device),
+                                      token_type_ids=torch.cat([positive_passage.segments, negative_passage.segments], dim=0).to(self.device),
+                                      attention_mask=torch.cat([positive_passage.attn_mask, negative_passage.attn_mask], dim=0).to(self.device),
+                                      return_dict=True)
                 
                 loss = loss_func(logit.to(self.device), labels.to(self.device))
                 
@@ -72,7 +72,11 @@ class RerankerTrainer():
                 optimizer.step()
                 
                 if index_batch % 10 == 0:
-                    current = (index_batch + 1) * len(sample_batch)
+                    current = (index_batch + 1) * self.batch_size
+                    print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                    batch_loss.append(float(loss))
+                elif len(positive_passage.input_ids) < self.batch_size:
+                    current = size
                     print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
                 

@@ -1,6 +1,7 @@
 import json
 import pandas as pd
 from torch.utils.data import Dataset
+import transformers
 from transformers import BertTokenizer
 from collections import namedtuple
 
@@ -33,6 +34,8 @@ class RerankerDataset(Dataset):
         self.claim_data = None
         self.evidences_data = None
         
+        # suppress undesirable warning message
+        transformers.logging.set_verbosity_error() 
         self.load_data()
         
         
@@ -49,7 +52,7 @@ class RerankerDataset(Dataset):
         
         negative_evidenct_sample = self.evidences_data.sample(n=1,
                                                               random_state=self.rand_seed)
-        negative_evidenct_text = self.clean_text(negative_evidenct_sample["evidence"].to_list()[0])
+        negative_evidenct_text = self.clean_text(negative_evidenct_sample["evidences"].to_list()[0])
         
         positive_encoding = self.tokenizer(text=claim_text,
                                            text_pair=positive_evidence_text,
