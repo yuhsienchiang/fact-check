@@ -71,32 +71,52 @@ class BiEncoder(nn.Module):
     
     
     def encode_query(self, input_ids: T, segments: T, attent_mask: T):
-        
+        input_shape = input_ids.shape 
+        if len(input_shape) == 3: 
+            batch_size, vec_num, _vec_len = input_shape
+            input_ids = torch.flatten(input_ids, 0, 1)
+            segments = torch.flatten(segments, 0, 1)
+            attent_mask = torch.flatten(attent_mask, 0, 1)
+            
         self.encoder_0.eval()
         with torch.no_grad():
             out = self.encoder_0(input_ids=input_ids,
                                  token_type_ids=segments,
                                  attention_mask=attent_mask)
         
-        self.encoder_o.train()
-        return out.pooler_output
+        query_pooler_output = out.pooler_output
+        
+        self.encoder_0.train()
+        
+        if len(input_shape) == 3:
+            query_pooler_output = torch.unflatten(query_pooler_output, 0, (batch_size, 1))
+        
+        return query_pooler_output
 
     
     def encode_evidence(self, input_ids: T, segments: T, attent_mask: T):
         
+        input_shape = input_ids.shape
+        if len(input_shape) == 3: 
+            batch_size, vec_num, _vec_len = input_shape
+            input_ids = torch.flatten(input_ids, 0, 1)
+            segments = torch.flatten(segments, 0, 1)
+            attent_mask = torch.flatten(attent_mask, 0, 1)
+            
         if self.encoder_1 is not None:
             
             self.encoder_1.eval()
             with torch.no_grad():
-                out = self.encoder_1(input_ids=input_ids,
-                                     token_type_ids=segments,
-                                     attention_mask=attent_mask)
-                
+                _evid_sequence, evid_pooler_output, _evid_hidden = self.encoder_1(input_ids=input_ids,
+                                                                               token_type_ids=segments,
+                                                                               attention_mask=attent_mask) 
                 self.encoder_1.train()
-                return out.pooler_output
-            
         else:
-            return self.encode_query(input_ids=input_ids,
-                                     segments=segments,
-                                     attent_mask=attent_mask)
+            evid_pooler_output = self.encode_query(input_ids=input_ids,
+                                                   segments=segments,
+                                                   attent_mask=attent_mask)
             
+        if len(input_shape) == 3:
+            evid_pooler_output = torch.unflatten(evid_pooler_output, 0, (batch_size, 1))
+                
+        return evid_pooler_output                
