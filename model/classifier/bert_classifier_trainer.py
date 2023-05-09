@@ -71,11 +71,15 @@ class BertClassifierTrainer():
                 optimizer.step()
                 
                 if index_batch % 10 == 0:
-                    current = (index_batch + 1) * len(sample_batch)
+                    current = (index_batch + 1) * self.batch_size
+                    print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                    batch_loss.append(float(loss))
+                elif len(labels) < self.batch_size:
+                    current = size
                     print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
                 
-                del logit, loss
+                del logit, loss, labels
                 
             train_loss_history.append(batch_loss)
             print()

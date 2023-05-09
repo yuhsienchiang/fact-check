@@ -103,21 +103,28 @@ class BiEncoderTrainer():
             trained_sample = 0
             for index_batch, sample_batch in enumerate(self.train_dataloader):
 
-                query = sample_batch.query
-                evid = sample_batch.evid
+                query_input_ids = sample_batch.query.input_ids.to(self.device)
+                query_segment = sample_batch.query.segments.to(self.device)
+                query_attn_mask = sample_batch.query.attn_mask.to(self.device)
+                evid_input_ids = sample_batch.evid.input_ids.to(self.device)
+                evid_segment = sample_batch.evid.segments.to(self.device)
+                evid_attn_mask = sample_batch.evid.attn_mask.to(self.device)
                 is_positive = sample_batch.is_positive
 
                 # forward pass the input through the biencoder model 
-                query_vector, evid_vector = self.model(query_ids=query.input_ids.to(self.device),
-                                                       query_segment=query.segments.to(self.device),
-                                                       query_attn_mask=query.attn_mask.to(self.device),
-                                                       evid_ids=evid.input_ids.to(self.device),
-                                                       evid_segment=evid.segments.to(self.device),
-                                                       evid_attn_mask=evid.attn_mask.to(self.device))
+                query_vector, evid_vector = self.model(query_ids=query_input_ids,
+                                                       query_segment=query_segment,
+                                                       query_attn_mask=query_attn_mask,
+                                                       evid_ids=evid_input_ids,
+                                                       evid_segment=evid_segment,
+                                                       evid_attn_mask=evid_attn_mask)
 
+                query_vector = query_vector.to(self.device)
+                evid_vector = evid_vector.to(self.device)
+                
                 # calculate the loss
-                loss = loss_func(query_vector=query_vector.to("cpu"),
-                                 evidence_vector=evid_vector.to("cpu"),
+                loss = loss_func(query_vector=query_vector,
+                                 evidence_vector=evid_vector,
                                  is_positive=is_positive)
 
                 # backpropadation
@@ -127,9 +134,15 @@ class BiEncoderTrainer():
 
                 # print info and store history
                 if index_batch % 10 == 0:
-                    trained_sample += len(query.input_ids)
+                    trained_sample += len(query_input_ids)
                     print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
+                elif len(query_input_ids) < self.batch_size:
+                    trained_sample += len(query_input_ids)
+                    print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
+                    batch_loss.append(float(loss))
+                
+                del query_input_ids, query_segment, query_attn_mask, evid_input_ids, evid_segment, evid_attn_mask
 
             train_loss_history.append(batch_loss)
             print()
