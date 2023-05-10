@@ -12,67 +12,37 @@ from .evidence_dataset import EvidenceDataset
 class BiEncoderTrainer():
     def __init__(self, 
                  model:BiEncoder=None,
-                 train_data: BiEncoderDataset=None,
-                 validate_data : BiEncoderDataset=None,
-                 evidence_data: EvidenceDataset=None,
+                 train_dataset: BiEncoderDataset=None,
                  shuffle: bool=True,
                  batch_size: int=64) -> None:
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         
         self.model = model.to(self.device)
-        self.train_data = train_data
-        self.validate_data = validate_data
-        self.evidence_data = evidence_data
+        self.train_dataset = train_dataset
         
         self.shuffle =shuffle
         self.batch_size = batch_size
         
-        if train_data is not None:
-            self.set_dataloader()
-    
-    def set_dataloader(self) -> None:
-        self.train_dataloader = DataLoader(self.train_data,
-                                           batch_size=self.batch_size,
-                                           shuffle=self.shuffle, 
-                                           num_workers=2, 
-                                           collate_fn=self.train_data.train_collate_fn)
-        
-        self.train_evaluate_dataloader = DataLoader(self.train_data,
-                                                    batch_size=self.batch_size, 
-                                                    shuffle=False,
-                                                    collate_fn=self.train_data.evaluate_collate_fn)
-        
-        self.dev_evaluate_dataloader = DataLoader(self.validate_data,
-                                                  batch_size=self.batch_size,
-                                                  shuffle=False, 
-                                                  collate_fn=self.validate_data.evaluate_collate_fn)
-        
-        self.evidence_dataloader = DataLoader(self.evidence_data, 
-                                              batch_size=1000,
-                                              drop_last=False,
-                                              shuffle=False) 
-            
             
     def train(self, 
-              train_data: BiEncoderDataset=None,
-              validate_data : BiEncoderDataset=None,
-              evidence_data: EvidenceDataset=None,           
+              train_dataset: BiEncoderDataset=None,
               shuffle: bool=True,
               max_epoch: int=10, 
               loss_func_type: str=None,
               similarity_func_type : str=None,
               optimizer_type: str=None, 
               learning_rate: float=0.001):
-
+        
         # setup dataloader
         self.shuffle = shuffle
-        self.train_data = train_data if train_data else self.train_data
-        self.validate_data = validate_data if validate_data else self.validate_data
-        self.evidence_data = evidence_data if evidence_data else self.evidence_data
+        self.train_dataset = train_dataset if train_dataset else self.train_dataset
         
-        if train_data is not None or validate_data is not None or evidence_data is not None:
-            self.set_dataloader()
+        train_dataloader = DataLoader(self.train_dataset,
+                                      batch_size=self.batch_size,
+                                      shuffle=self.shuffle,
+                                      num_workers=2,
+                                      collate_fn=self.train_dataset.train_collate_fn)
         
         size = len(self.train_data)
 
@@ -101,7 +71,7 @@ class BiEncoderTrainer():
 
             batch_loss = []
             trained_sample = 0
-            for index_batch, sample_batch in enumerate(self.train_dataloader):
+            for index_batch, sample_batch in enumerate(train_dataloader):
 
                 query_input_ids = sample_batch.query.input_ids.to(self.device)
                 query_segment = sample_batch.query.segments.to(self.device)
@@ -142,11 +112,13 @@ class BiEncoderTrainer():
                     print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
                 
-                del query_input_ids, query_segment, query_attn_mask, evid_input_ids, evid_segment, evid_attn_mask
+
 
             train_loss_history.append(batch_loss)
             print()
-
+        
+        del query_input_ids, query_segment, query_attn_mask, evid_input_ids, evid_segment, evid_attn_mask
+        
         self.train_loss_history = train_loss_history
         print("Training Done!")
         return train_loss_history
@@ -192,9 +164,10 @@ class BiEncoderTrainer():
         # calculate similarity score and scale down the value for the sake of performance
         similarity_score = similarity_func(query_vec=query_vector, evidence_vec=evidence_vector) / 10.0
         
-        positive_mask = self.create_positive_mask(is_positive=is_positive, shape=similarity_score.shape)
+        positive_mask = self.create_positive_mask(is_positive=is_positive,
+                                                  shape=similarity_score.shape).to(self.device)
         
-        log_softmax_score = F.log_softmax(similarity_score, dim=1)
+        log_softmax_score = F.log_softmax(similarity_score, dim=1).to(self.device)
         
         return - torch.mean(log_softmax_score * positive_mask).to(self.device)
 
@@ -207,67 +180,3 @@ class BiEncoderTrainer():
             mask[idx, idx: idx+positive_end] = 1
             
         return mask
-    
-    
-    def get_evidence_embbed(self):
-        evidence_embbed = []
-        evidence_tag = []
-        
-        for batch_sample in tqdm(self.evidence_dataloader):
-            evidence = batch_sample.evidence
-            evid_input_ids = evidence.input_ids.to(self.device)
-            evid_segments = evidence.segments.to(self.device)
-            evid_attent_mask = evidence.attn_mask.to(self.device)
-            
-            evid_embbed = self.model.encode_evidence(input_ids=evid_input_ids,
-                                                     segments=evid_segments,
-                                                     attent_mask=evid_attent_mask)
-            
-            evid_embbed_cpu = evid_embbed.cpu()
-            
-            del evid_embbed, evid_input_ids, evid_segments, evid_attent_mask
-            
-            evidence_embbed.append(evid_embbed_cpu)
-            evidence_tag.extend(batch_sample)
-        
-        return torch.cat(evidence_embbed), evidence_tag
-
-    
-    
-    def evaluate(self, dataloader: DataLoader, evid_embbed_set):
-        
-        f_score = []
-        evid_embbed, evid_tag = evid_embbed_set
-        
-        for batch_sample in tqdm(dataloader):
-            query = batch_sample.query
-            evid_tag = batch_sample.evid_tag
-            
-            query_embbed = self.model.encode_query(input_ids=query.input_ids,
-                                                  segments=query.segments,
-                                                  attent_mask=query.attn_mask)
-            
-            similarity_score = torch.matmul(query_embbed, evid_embbed.transpose(dim0=0, dim1=1))
-            top_k = torch.topk(similarity_score, k=5, dim=1).indices
-
-            for query_idx, tags in enumerate(evid_tag):
-                evidence_correct = 0
-                
-                pred_evidences = [evid_tag[evid_idx] for evid_idx in top_k[query_idx]]
-                
-                for tag in tags:
-                    if tag in pred_evidences:
-                        evidence_correct += 1
-                if evidence_correct > 0:
-                    evid_recall = float(evidence_correct) / len(tags)
-                    evid_precision = float(evidence_correct) / len(pred_evidences)
-                    evid_f_score = (2 * evid_precision * evid_recall) / (evid_precision + evid_recall)
-                else:
-                    evid_f_score = 0
-                    
-                f_score.append(evid_f_score)
-
-        mean_f_score = (f_score) / len(f_score)
-        print(f"Biencoder F-score: {mean_f_score:>6f}")
-
-        return mean_f_score
