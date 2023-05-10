@@ -178,6 +178,8 @@ class BiEncoder(nn.Module):
         f_out.close()
         print("Exported.")
         
+        evid_embed_dict = {"tag": evidence_tag, "evidence": evidence_embed}
+
         return evid_embed_dict
 
 
