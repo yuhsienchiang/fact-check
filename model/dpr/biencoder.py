@@ -150,24 +150,24 @@ class BiEncoder(nn.Module):
         evidence_dataloader = DataLoader(evidence_dataset,
                                          batch_size=batch_size,
                                          shuffle=False)
-        
-        for batch_sample in tqdm(evidence_dataloader):
-            evidence = batch_sample.evidence
-            evid_input_ids = evidence.input_ids.to(self.device)
-            evid_segments = evidence.segments.to(self.device)
-            evid_attent_mask = evidence.attn_mask.to(self.device)
+        with torch.no_grad():
+            for batch_sample in tqdm(evidence_dataloader):
+                evidence = batch_sample.evidence
+                evid_input_ids = evidence.input_ids.to(self.device)
+                evid_segments = evidence.segments.to(self.device)
+                evid_attent_mask = evidence.attn_mask.to(self.device)
+                
+                evid_embed = self.encode_evidence(input_ids=evid_input_ids,
+                                                segments=evid_segments,
+                                                attent_mask=evid_attent_mask)
+                
+                evid_embed_cpu = evid_embed.detatch().cpu()
+                
+                del evid_embed, evid_input_ids, evid_segments, evid_attent_mask
+                
+                evidence_embed.append(evid_embed_cpu)
+                evidence_tag.extend(batch_sample.tag)
             
-            evid_embed = self.encode_evidence(input_ids=evid_input_ids,
-                                               segments=evid_segments,
-                                               attent_mask=evid_attent_mask)
-            
-            evid_embed_cpu = evid_embed.detatch().cpu()
-            
-            del evid_embed, evid_input_ids, evid_segments, evid_attent_mask
-            
-            evidence_embed.append(evid_embed_cpu)
-            evidence_tag.extend(batch_sample.tag)
-        
         evidence_embed = torch.cat(evidence_embed)
         
         evid_embed_dict = {tag: embed[0].tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
@@ -205,19 +205,22 @@ class BiEncoder(nn.Module):
             query_segments = query.segments.to(self.device)
             query_attn_mask = query.attn_mask.to(self.device)
             
-            query_embed = self.encode_query(input_ids=query_input_ids,
-                                             segments=query_segments,
-                                             attent_mask=query_attn_mask)
-            
-            similarity_score = torch.matmul(query_embed.flatten(1), evid_embed)
+            with torch.no_grad():
+                query_embed = self.encode_query(input_ids=query_input_ids,
+                                                segments=query_segments,
+                                                attent_mask=query_attn_mask)
+                
+                similarity_score = torch.matmul(query_embed.flatten(1), evid_embed)
 
-            top_ks = torch.topk(similarity_score, k=k, dim=1).indices
+                top_ks = torch.topk(similarity_score, k=k, dim=1).indices
             
-            for query_tag, top_k in zip(query_tags, top_ks):
-                predictions[query_tag] = [tags[idx] for idx in top_k]
+                for query_tag, top_k in zip(query_tags, top_ks):
+                    predictions[query_tag] = [tags[idx] for idx in top_k]
                 
             del query_input_ids, query_segments, query_attn_mask, query_embed, similarity_score, top_ks
-                
+        
+        del evid_embed
+        
         print("Exporting...")
         f_out = open("data/output/retrieval-claim-prediction.json", 'w')
         json.dump(predictions, f_out)

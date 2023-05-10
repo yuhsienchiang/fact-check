@@ -1,11 +1,15 @@
 from typing import Tuple
 
 from torch import Tensor as T
+import transformers
 from transformers import BertModel, BertConfig, BertTokenizer
 
 class BertEncoder(BertModel):
     
     def __init__(self, config :BertConfig=None, add_pooling_layer :bool=True) -> None:
+        
+        # suppress undesirable warning message
+        transformers.logging.set_verbosity_error() 
 
         if config is None:    
             super(BertEncoder, self).__init__(BertConfig.from_pretrained("bert-base-uncased"),

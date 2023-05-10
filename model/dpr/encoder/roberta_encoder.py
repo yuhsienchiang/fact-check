@@ -1,12 +1,17 @@
 from typing import Tuple
 
 from torch import Tensor as T
+import transformers
 from transformers import RobertaModel, RobertaConfig, RobertaTokenizer
 
 
 class RoBertaEncoder(RobertaModel):
     
     def __init__(self, config: RobertaConfig=None, add_pooling_layer=True) -> None:
+        
+        # suppress undesirable warning message
+        transformers.logging.set_verbosity_error() 
+        
         if config is None:
             super(RoBertaEncoder, self).__init__(RobertaConfig.from_pretrained("roberta-base"), 
                                                  add_pooling_layer)

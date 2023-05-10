@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor as T
 from torch import nn
+import transformers
 from transformers import BertModel
 
 from .reranker_dataset import RerankerPassage
@@ -12,6 +13,9 @@ class Reranker(nn.Module):
         super(Reranker, self).__init__()
         
         device = torch.device("cuda:0" if torch.cuda.is_available else "cpu")
+        
+        # suppress undesirable warning message
+        transformers.logging.set_verbosity_error()  
         
         self.encoder_layer = BertModel.from_pretrained("bert-base-uncased").to(device)
         hidden_size = self.encoder_layer.config.hidden_size
