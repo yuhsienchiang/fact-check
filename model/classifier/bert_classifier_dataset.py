@@ -2,6 +2,7 @@ import json
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
+import transformers
 from transformers import BertTokenizer
 from collections import namedtuple
 
@@ -44,6 +45,9 @@ class BertClassifierDataset(Dataset):
         
         self.claim_data = None
         self.evidences_data = None
+        
+        # suppress undesirable warning message
+        transformers.logging.set_verbosity_error()  
         
         self.load_data()
         
