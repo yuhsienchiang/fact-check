@@ -17,20 +17,21 @@ class BertClassifierTrainer():
         self.classifier = classifier.to(self.device)
         
     def train(self, 
-              train_data, 
+              train_dataset, 
               shuffle: bool=True, 
               max_epoch: int=10,
               loss_func_type: str=None,
               optimizer_type : str=None,
               learning_rate: float=0.001):
         
-        self.train_data = train_data
-        train_dataloader = DataLoader(self.train_data,
+        self.train_dataset = train_dataset
+        train_dataloader = DataLoader(self.train_dataset,
                                       batch_size=self.batch_size,
                                       shuffle=shuffle,
+                                      collate_fn=self.train_dataset.train_collate_fn,
                                       num_workers=2)
         
-        size = len(self.train_data)
+        size = len(self.train_dataset)
         
         self.classifier.train()
         
@@ -54,8 +55,8 @@ class BertClassifierTrainer():
             batch_loss = []
             for index_batch, sample_batch in enumerate(train_dataloader):
                 
-                text_sequences = sample_batch.text_sequences
-                labels = sample_batch.label.to(self.device)
+                text_sequences = sample_batch.text_sequence
+                labels = sample_batch.query_label.to(self.device)
                 
                 logit = self.classifier(input_ids=text_sequences.input_ids.to(self.device),
                                         token_type_ids=text_sequences.segments.to(self.device),
