@@ -139,7 +139,7 @@ class BiEncoder(nn.Module):
             
         evidence_embed = torch.cat(evidence_embed)
         
-        evid_embed_dict = {tag: embed[0].tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
+        evid_embed_dict = {tag: embed.tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
         
         if output_file_path is not None:
             print("Exporting...")
