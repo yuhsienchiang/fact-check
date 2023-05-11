@@ -72,9 +72,9 @@ class BiEncoderTrainer():
                 query_segment = sample_batch.query.segments.squeeze(1).to(self.device)
                 query_attn_mask = sample_batch.query.attn_mask.squeeze(1).to(self.device)
                 # evidence inputs - reshape and move to gpu
-                evid_input_ids = sample_batch.evid.input_ids.squeeze(1).to(self.device)
-                evid_segment = sample_batch.evid.segments.squeeze(1).to(self.device)
-                evid_attn_mask = sample_batch.evid.attn_mask.squeeze(1).to(self.device)
+                evid_input_ids = torch.flatten(sample_batch.evid.input_ids, 0, 1).to(self.device)
+                evid_segment = torch.flatten(sample_batch.evid.segments, 0, 1).to(self.device)
+                evid_attn_mask = torch.flatten(sample_batch.evid.attn_mask, 0, 1).to(self.device)
                 # positive evidence position info
                 is_positive = sample_batch.is_positive
 
