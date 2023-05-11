@@ -6,22 +6,16 @@ from tqdm import tqdm
 
 from .biencoder import BiEncoder
 from .biencoder_dataset import BiEncoderDataset
-from .evidence_dataset import EvidenceDataset
 
 
 class BiEncoderTrainer():
     def __init__(self, 
                  model:BiEncoder=None,
-                 train_dataset: BiEncoderDataset=None,
-                 shuffle: bool=True,
                  batch_size: int=64) -> None:
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu") 
         
         self.model = model.to(self.device)
-        self.train_dataset = train_dataset
-        
-        self.shuffle =shuffle
         self.batch_size = batch_size
         
             
@@ -32,7 +26,7 @@ class BiEncoderTrainer():
               loss_func_type: str=None,
               similarity_func_type : str=None,
               optimizer_type: str=None, 
-              learning_rate: float=0.001):
+              learning_rate: float=0.0001):
         
         # setup dataloader
         self.shuffle = shuffle
@@ -44,7 +38,7 @@ class BiEncoderTrainer():
                                       num_workers=2,
                                       collate_fn=self.train_dataset.train_collate_fn)
         
-        size = len(self.train_data)
+        size = len(self.train_dataset)
 
         # set model to training mode
         self.model.train()
@@ -73,12 +67,15 @@ class BiEncoderTrainer():
             trained_sample = 0
             for index_batch, sample_batch in enumerate(train_dataloader):
 
-                query_input_ids = sample_batch.query.input_ids.to(self.device)
-                query_segment = sample_batch.query.segments.to(self.device)
-                query_attn_mask = sample_batch.query.attn_mask.to(self.device)
-                evid_input_ids = sample_batch.evid.input_ids.to(self.device)
-                evid_segment = sample_batch.evid.segments.to(self.device)
-                evid_attn_mask = sample_batch.evid.attn_mask.to(self.device)
+                # query inputs - reshape and move to gpu
+                query_input_ids = sample_batch.query.input_ids.squeeze(1).to(self.device)
+                query_segment = sample_batch.query.segments.squeeze(1).to(self.device)
+                query_attn_mask = sample_batch.query.attn_mask.squeeze(1).to(self.device)
+                # evidence inputs - reshape and move to gpu
+                evid_input_ids = sample_batch.evid.input_ids.squeeze(1).to(self.device)
+                evid_segment = sample_batch.evid.segments.squeeze(1).to(self.device)
+                evid_attn_mask = sample_batch.evid.attn_mask.squeeze(1).to(self.device)
+                # positive evidence position info
                 is_positive = sample_batch.is_positive
 
                 # forward pass the input through the biencoder model 
@@ -89,8 +86,8 @@ class BiEncoderTrainer():
                                                        evid_segment=evid_segment,
                                                        evid_attn_mask=evid_attn_mask)
 
-                query_vector = query_vector.to(self.device)
-                evid_vector = evid_vector.to(self.device)
+                query_vector = F.normalize(query_vector, p=2, dim=-1).to(self.device)
+                evid_vector = F.normalize(evid_vector, p=2, dim=-1).to(self.device)
                 
                 # calculate the loss
                 loss = loss_func(query_vector=query_vector,
@@ -102,17 +99,14 @@ class BiEncoderTrainer():
                 loss.backward()
                 optimizer.step()
 
+                trained_sample += len(query_input_ids)
                 # print info and store history
                 if index_batch % 10 == 0:
-                    trained_sample += len(query_input_ids)
                     print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
-                elif len(query_input_ids) < self.batch_size:
-                    trained_sample += len(query_input_ids)
+                elif trained_sample == size:
                     print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
-                
-
 
             train_loss_history.append(batch_loss)
             print()
@@ -139,6 +133,8 @@ class BiEncoderTrainer():
 
 
     def dot_similarity(self, query_vec: T, evidence_vec: T):
+        # in-batch negative sampling is done by 
+        # taking thte dot product of query_vec and the transpose of evidence_vec
         return torch.matmul(query_vec, evidence_vec.transpose(dim0=0, dim1=1))
 
 
@@ -154,21 +150,15 @@ class BiEncoderTrainer():
     def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive: T):        
         similarity_func = self.select_similarity_func(self.similarity_func_type)
 
-        # ensure the vectors only has 2 dim
-        if len(query_vector.shape) == 3:
-            query_vector = query_vector.squeeze(1)
-
-        if len(evidence_vector.shape) == 3:
-            evidence_vector = torch.flatten(evidence_vector, 0, 1)
-
-        # calculate similarity score and scale down the value for the sake of performance
-        similarity_score = similarity_func(query_vec=query_vector, evidence_vec=evidence_vector) / 10.0
+        # calculate similarity score
+        similarity_score = similarity_func(query_vec=query_vector, evidence_vec=evidence_vector)
         
         positive_mask = self.create_positive_mask(is_positive=is_positive,
                                                   shape=similarity_score.shape).to(self.device)
-        
+        # compute log softmax score
         log_softmax_score = F.log_softmax(similarity_score, dim=1).to(self.device)
         
+        # return negative log likelihood of the positive evidences
         return - torch.mean(log_softmax_score * positive_mask).to(self.device)
 
     
