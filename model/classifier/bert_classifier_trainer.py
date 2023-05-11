@@ -22,7 +22,7 @@ class BertClassifierTrainer():
               max_epoch: int=10,
               loss_func_type: str=None,
               optimizer_type : str=None,
-              learning_rate: float=0.001):
+              learning_rate: float=0.0001):
         
         self.train_dataset = train_dataset
         train_dataloader = DataLoader(self.train_dataset,
@@ -48,6 +48,7 @@ class BertClassifierTrainer():
             optimizer = torch.optim.Adam(self.classifier.parameters(), lr=learning_rate)
         
         train_loss_history = []
+        trained_sample = 0
         for epoch in range(max_epoch):
             
             print(f"Epoch {epoch+1}\n-------------------------------")
@@ -56,31 +57,31 @@ class BertClassifierTrainer():
             for index_batch, sample_batch in enumerate(train_dataloader):
                 
                 text_sequences = sample_batch.text_sequence
+                text_sequences_input_ids = text_sequences.input_ids.squeeze(1).to(self.device) 
+                text_sequences_token_type_ids = text_sequences.segments.squeeze(1).to(self.device) 
+                text_sequences_attention_mask = text_sequences.attn_mask.squeeze(1).to(self.device) 
                 labels = sample_batch.query_label.to(self.device)
                 
-                logit = self.classifier(input_ids=text_sequences.input_ids.to(self.device),
-                                        token_type_ids=text_sequences.segments.to(self.device),
-                                        attention_mask=text_sequences.attn_mask.to(self.device),
+                logit = self.classifier(input_ids=text_sequences_input_ids,
+                                        token_type_ids=text_sequences_token_type_ids,
+                                        attention_mask=text_sequences_attention_mask,
                                         return_dict=True)
                 
-                logit = torch.flatten(logit, 0, 1).to(self.device)
-                
-                loss = loss_func(logit, labels)
+                loss = loss_func(logit, labels.to(torch.long)).to(self.device)
                 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 
-                if index_batch % 10 == 0:
-                    current = (index_batch + 1) * self.batch_size
-                    print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                trained_sample += len(labels)
+                if index_batch % 10 == 0:    
+                    print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
-                elif len(labels) < self.batch_size:
-                    current = size
-                    print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+                elif trained_sample == size:
+                    print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
                 
-                del logit, loss, labels
+                del logit, loss, labels, text_sequences_input_ids, text_sequences_token_type_ids, text_sequences_attention_mask
                 
             train_loss_history.append(batch_loss)
             print()

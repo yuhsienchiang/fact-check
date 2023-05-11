@@ -29,40 +29,30 @@ class BertClassifier(nn.Module):
         self.linear_output = nn.Linear(hidden_size, 4).to(self.device)
         
         
-        
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T, return_dict: bool=True):
-        
-        input_shape = input_ids.shape
-        if len(input_shape) == 3: 
-            batch_size, vec_num, _vec_len = input_shape
-            input_ids = torch.flatten(input_ids, 0, 1)
-            token_type_ids = torch.flatten(token_type_ids, 0, 1)
-            attention_mask = torch.flatten(attention_mask, 0, 1)
         
         out = self.bert_layer(input_ids=input_ids,
                               token_type_ids=token_type_ids,
                               attention_mask=attention_mask,
                               return_dict=return_dict)
-
+        
         x = self.linear_layer(out.pooler_output)
         x = self.activation(x)
         logit = self.linear_output(x)
         
-        if len(input_shape) == 3:
-            logit = torch.unflatten(logit, 0, (batch_size, 1))
-        
         return logit
 
 
-    def predict(self, claim_dataset: BertClassifierDataset, batch_size: int):
+    def predict(self, claim_dataset: BertClassifierDataset, batch_size: int, output_file_path: str=None):
     
         self.eval()
         
         predictions = {}
         claim_dataloader = DataLoader(claim_dataset,
                                       batch_size=batch_size,
+                                      shuffle=False,
                                       num_workers=2,
-                                      collate_fn=claim_dataset.evaluate_collate_fn)
+                                      collate_fn=claim_dataset.predict_collate_fn)
     
         for batch_claim_sample in tqdm(claim_dataloader):
             text_sequence = batch_claim_sample.text_sequence
@@ -70,9 +60,9 @@ class BertClassifier(nn.Module):
                         
             with torch.no_grad():
                 
-                text_sequence_input_ids = text_sequence.input_ids.to(self.device)
-                text_sequence_segments = text_sequence.segments.to(self.device)
-                text_sequence_attn_mask = text_sequence.attn_mask.to(self.device)
+                text_sequence_input_ids = text_sequence.input_ids.squeeze(1).to(self.device)
+                text_sequence_segments = text_sequence.segments.squeeze(1).to(self.device)
+                text_sequence_attn_mask = text_sequence.attn_mask.squeeze(1).to(self.device)
                 
                 logit = self.__call__(input_ids=text_sequence_input_ids,
                                       token_type_ids=text_sequence_segments,
@@ -81,16 +71,19 @@ class BertClassifier(nn.Module):
                 predict_idxs = torch.argmax(logit, dim=-1)
                 
                 for tag, predict_idx in zip(query_tag, predict_idxs):
-                    predictions[tag] = IDX_TO_CLASS[predict_idx]
+                    predictions[tag] = IDX_TO_CLASS[predict_idx.tolist()]
             
             del text_sequence_input_ids, text_sequence_segments, text_sequence_attn_mask, logit        
         
         self.train()
-        print("Exporting...")
-        f_out = open("data/output/claim-classify-prediction.json", 'w')
-        json.dump(predictions, f_out)
-        f_out.close()
-        print("Exported.")
+        if output_file_path is not None:
+            print("Exporting...")
+            f_out = open(output_file_path, 'w')
+            json.dump(predictions, f_out)
+            f_out.close()
+            print('\033[1A', end='\x1b[2K')
+            print("File Exported.")
         
+        print("Prediction Done!")
         return predictions
         

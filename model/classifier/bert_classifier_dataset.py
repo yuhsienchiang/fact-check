@@ -150,7 +150,7 @@ class BertClassifierDataset(Dataset):
                                          query_tag=batch_tag)
     
     
-    def evaluate_collate_fn(self, batch): 
+    def predict_collate_fn(self, batch): 
         batch_text_sequence_input_ids = []
         batch_text_sequence_segments = []
         batch_text_sequence_attn_mask = [] 
