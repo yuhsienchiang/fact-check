@@ -173,9 +173,9 @@ class BiEncoder(nn.Module):
             query = batch_claim_sample.query
             query_tags = batch_claim_sample.query_tag
             
-            query_input_ids = query.input_ids.to(self.device)
-            query_segments = query.segments.to(self.device)
-            query_attn_mask = query.attn_mask.to(self.device)
+            query_input_ids = query.input_ids.squeeze(1).to(self.device)
+            query_segments = query.segments.squeeze(1).to(self.device)
+            query_attn_mask = query.attn_mask.squeeze(1).to(self.device)
             
             with torch.no_grad():
                 query_embed = self.encode_query(input_ids=query_input_ids,
