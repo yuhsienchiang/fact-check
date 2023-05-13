@@ -80,10 +80,8 @@ class BiEncoderTrainer():
 
                 # forward pass the input through the biencoder model 
                 query_vector, evid_vector = self.model(query_ids=query_input_ids,
-                                                       query_segment=query_segment,
                                                        query_attn_mask=query_attn_mask,
                                                        evid_ids=evid_input_ids,
-                                                       evid_segment=evid_segment,
                                                        evid_attn_mask=evid_attn_mask)
 
                 query_vector = F.normalize(query_vector, p=2, dim=-1).to(self.device)
@@ -156,10 +154,10 @@ class BiEncoderTrainer():
         positive_mask = self.create_positive_mask(is_positive=is_positive,
                                                   shape=similarity_score.shape).to(self.device)
         # compute log softmax score
-        log_softmax_score = F.log_softmax(similarity_score, dim=1).to(self.device)
+        log_softmax_score = - F.log_softmax(similarity_score, dim=1).to(self.device)
         
         # return negative log likelihood of the positive evidences
-        return - torch.mean(log_softmax_score * positive_mask).to(self.device)
+        return torch.mean(log_softmax_score * positive_mask).to(self.device)
 
     
     def create_positive_mask(self, is_positive, shape):
@@ -167,6 +165,7 @@ class BiEncoderTrainer():
         mask = torch.zeros(shape)
         
         for idx, positive_end in enumerate(is_positive):
-            mask[idx, idx: idx+positive_end] = 1
+            start_idx = (self.train_dataset.evidence_num  * idx) + idx
+            mask[idx, start_idx: start_idx + positive_end] = 1
             
         return mask
