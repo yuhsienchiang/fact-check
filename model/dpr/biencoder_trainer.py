@@ -84,8 +84,8 @@ class BiEncoderTrainer():
                                                        evid_ids=evid_input_ids,
                                                        evid_attn_mask=evid_attn_mask)
 
-                query_vector = F.normalize(query_vector, p=2, dim=-1).to(self.device)
-                evid_vector = F.normalize(evid_vector, p=2, dim=-1).to(self.device)
+                query_vector = query_vector.to(self.device)
+                evid_vector = evid_vector.to(self.device)
                 
                 # calculate the loss
                 loss = loss_func(query_vector=query_vector,
@@ -110,6 +110,7 @@ class BiEncoderTrainer():
             print()
         
         del query_input_ids, query_segment, query_attn_mask, evid_input_ids, evid_segment, evid_attn_mask
+        del query_vector, evid_vector
         
         self.train_loss_history = train_loss_history
         print("Training Done!")
