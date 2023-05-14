@@ -106,10 +106,6 @@ class BertClassifierDataset(Dataset):
         
         
     def clean_text(self, context: str, lower_case: bool=False) -> str:
-        
-        context = context.replace("`", "'")
-        context = context.replace(" 's", "'s")
-        
         return context.lower() if lower_case else context
     
     
