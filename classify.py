@@ -59,7 +59,7 @@ def run():
     print("Training starts...")
     bert_classifier_trainer.train(train_dataset=classifier_train_dataset,
                                   shuffle=True,
-                                  max_epoch=20,
+                                  max_epoch=25,
                                   loss_func_type="cross_entropy",
                                   optimizer_type="adam",
                                   learning_rate=1e-5)

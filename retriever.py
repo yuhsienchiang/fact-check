@@ -23,16 +23,16 @@ def run():
                                                data_type="train",
                                                evidence_file_path="./data/evidence.json",
                                                tokenizer=bert_tokenizer,
-                                               lower_case=False,
+                                               lower_case=True,
                                                max_padding_length=128,
-                                               evidence_num=16,
+                                               evidence_num=8,
                                                rand_seed=666)
     # Testing dataset
     biencoder_valid_train_dataset = BiEncoderDataset(claim_file_path="./data/train-claims.json",
                                                      data_type="predict",
                                                      evidence_file_path="./data/evidence.json",
                                                      tokenizer=bert_tokenizer,
-                                                     lower_case=False,
+                                                     lower_case=True,
                                                      max_padding_length=128,
                                                      evidence_num=0,
                                                      rand_seed=666)
@@ -41,7 +41,7 @@ def run():
                                                    data_type="predict",
                                                    evidence_file_path="./data/evidence.json",
                                                    tokenizer=bert_tokenizer,
-                                                   lower_case=False,
+                                                   lower_case=True,
                                                    max_padding_length=128,
                                                    evidence_num=0,
                                                    rand_seed=666)
@@ -50,7 +50,7 @@ def run():
     #Evidence dataset
     evidence_dataset = EvidenceDataset(evidence_file_path="./data/evidence.json",
                                        tokenizer=bert_tokenizer,
-                                       lower_case=False,
+                                       lower_case=True,
                                        max_padding_length=128,
                                        rand_seed=666)
     
@@ -60,7 +60,7 @@ def run():
     # create model
     print("Create BiEncoder...")
     query_encoder = BertModel.from_pretrained("bert-base-uncased")
-    biencoder = BiEncoder(query_model=query_encoder, similarity_func_type="dot")
+    biencoder = BiEncoder(query_model=query_encoder, similarity_func_type="cosine")
     print('\033[1A', end='\x1b[2K')
     print("BiEncoder created.")
     
@@ -72,29 +72,29 @@ def run():
     print("Training starts...")
     biencoder_history = biencoder_trainer.train(train_dataset=biencoder_train_dataset,
                                                 shuffle=True,
-                                                max_epoch=20,
+                                                max_epoch=25,
                                                 loss_func_type="nll_loss",
                                                 optimizer_type="adam",
-                                                learning_rate=2e-5)
+                                                learning_rate=1e-5)
     
     # Encode evidence
     print("Start embedding evidences....")
     time.sleep(3)
     print("Embedding...")
     embed_evid_data = biencoder.get_evidence_embed(evidence_dataset=evidence_dataset,
-                                                   batch_size=1000,
-                                                   output_file_path="./data/output/embed-evidence.json")
+                                                   batch_size=1000)
     
     # retrieve info
     print("Start retrieve info...")
     time.sleep(3)
     print('\033[1A', end='\x1b[2K')
+    print("Retreive no. 1 ....")
     retrieve_output = biencoder.retrieve(biencoder_valid_train_dataset,
                                          embed_evid_data=embed_evid_data,
                                          k=5,
                                          batch_size =128,
                                          predict_output_path="./data/output/retrieve-train-claims.json")
-    
+    print("Retreive no. 2 ....")    
     retrieve_output = biencoder.retrieve(biencoder_valid_dev_dataset,
                                          embed_evid_data=embed_evid_data,
                                          k=5,
