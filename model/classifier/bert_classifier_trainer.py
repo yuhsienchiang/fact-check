@@ -77,7 +77,7 @@ class BertClassifierTrainer():
                 
                 del logit, loss, labels, text_sequences_input_ids, text_sequences_token_type_ids, text_sequences_attention_mask
                 
-            self.trtrain_loss_history.append(batch_loss)
+            self.train_loss_history.append(batch_loss)
             print()
         
         print("Bert Classifier Training Complete!")

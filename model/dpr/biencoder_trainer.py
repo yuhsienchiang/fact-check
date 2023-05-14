@@ -40,6 +40,9 @@ class BiEncoderTrainer():
 
         # set model to training mode
         self.model.train()
+        self.model.encoder_0.train()
+        if self.model.encoder_1 is not None:
+            self.model.encoder_1.train()
 
         # initialize loss function
         self.loss_func_type = loss_func_type if loss_func_type else "nll_loss"
@@ -102,6 +105,11 @@ class BiEncoderTrainer():
             self.train_loss_history.append(batch_loss)
             print()
         
+        self.model.eval()
+        self.model.encoder_0.eval()
+        if self.model.encoder_1 is not None:
+            self.model.encoder_1.eval()
+        
         print("Training Done!")
         return self.train_loss_history
 
@@ -123,7 +131,7 @@ class BiEncoderTrainer():
     def dot_similarity(self, query_vec: T, evidence_vec: T):
         # in-batch negative sampling is done by 
         # taking thte dot product of query_vec and the transpose of evidence_vec
-        return torch.mm(query_vec, evidence_vec.transpose(dim0=0, dim1=1))
+        return torch.mm(query_vec, evidence_vec.transpose(dim0=0, dim1=1)) / 100.0
 
 
     def cosine_similarity(self, query_vec: T, evidence_vec: T):
@@ -131,8 +139,7 @@ class BiEncoderTrainer():
         normalized_query_vec = F.normalize(query_vec, p=2, dim=1)
         normalized_evidence_vec = F.normalize(evidence_vec, p=2, dim=1)
 
-        return self.dot_similarity(query_vec=normalized_query_vec,
-                                   evidence_vec=normalized_evidence_vec)
+        return torch.mm(normalized_query_vec, normalized_evidence_vec.transpose(dim0=0, dim1=1)) * 10.0
 
 
     def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive: T):        
@@ -144,7 +151,7 @@ class BiEncoderTrainer():
         positive_mask = self.create_positive_mask(is_positive=is_positive,
                                                   shape=similarity_score.shape).to(self.device)
         # compute log softmax score
-        log_softmax_score = - F.log_softmax(similarity_score, dim=1).to(self.device)
+        log_softmax_score = - F.log_softmax(similarity_score, dim=-1).to(self.device)
         
         positive_log_softmax_score = torch.sum(log_softmax_score * positive_mask, dim=-1)
         

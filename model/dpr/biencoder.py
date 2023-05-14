@@ -58,12 +58,14 @@ class BiEncoder(nn.Module):
         
         if sub_model.training:
             out = sub_model(input_ids=ids,
-                            attention_mask=attent_mask)
+                            attention_mask=attent_mask,
+                            return_dict=True)
 
         else:
             with torch.no_grad():
                 out = sub_model(input_ids=ids,
-                                attention_mask=attent_mask)
+                                attention_mask=attent_mask,
+                                return_dict=True)
         
         sequence = out.last_hidden_state
         pooler_output = out.pooler_output
@@ -143,7 +145,7 @@ class BiEncoder(nn.Module):
             print('\033[1A', end='\x1b[2K')
             print("File Exported.")
         
-        evid_embed_dict = {"tag": evidence_tag.tolist(), "evidence": evidence_embed.tolist()}
+        evid_embed_dict = {"tag": evidence_tag, "evidence": evidence_embed.tolist()}
         del evidence_tag, evidence_embed
         print("Embedding Done!")
         
