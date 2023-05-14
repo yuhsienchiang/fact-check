@@ -2,7 +2,6 @@ import torch
 from torch import Tensor as T
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 
 from .biencoder import BiEncoder
 from .biencoder_dataset import BiEncoderDataset
@@ -24,18 +23,17 @@ class BiEncoderTrainer():
               shuffle: bool=True,
               max_epoch: int=10, 
               loss_func_type: str=None,
-              similarity_func_type : str=None,
               optimizer_type: str=None, 
-              learning_rate: float=0.0001):
+              learning_rate: float=2e-5):
         
         # setup dataloader
         self.shuffle = shuffle
-        self.train_dataset = train_dataset if train_dataset else self.train_dataset
+        self.train_dataset = train_dataset
         
         train_dataloader = DataLoader(self.train_dataset,
                                       batch_size=self.batch_size,
                                       shuffle=self.shuffle,
-                                      num_workers=2,
+                                      num_workers=4,
                                       collate_fn=self.train_dataset.train_collate_fn)
         
         size = len(self.train_dataset)
@@ -44,36 +42,32 @@ class BiEncoderTrainer():
         self.model.train()
 
         # initialize loss function
-        self.similarity_func_type = similarity_func_type if similarity_func_type else "dot"
         self.loss_func_type = loss_func_type if loss_func_type else "nll_loss"
-
         loss_func = self.select_loss_func(self.loss_func_type)
 
         # initialize optimizer
-        self.optimizer = optimizer_type if optimizer_type else self.optimizer
-        if self.optimizer == "adam":
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
-        elif self.optimizer == "SGD":
-            optimizer = torch.optim.SGD(self.model.parameters(), lr=learning_rate)
-        else:
-            optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.optimizer_type = optimizer_type if optimizer_type else "adam"
+        self.learning_rate = learning_rate
+        if self.optimizer_type == "adam":
+            optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        elif self.optimizer_type == "SGD":
+            optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
 
-        train_loss_history = []
+        # start training
+        self.train_loss_history = []
         for epoch in range(max_epoch):
 
             print(f"Epoch {epoch+1}\n-------------------------------")
 
             batch_loss = []
-            trained_sample = 0
+            batch_trained_sample = 0
             for index_batch, sample_batch in enumerate(train_dataloader):
 
                 # query inputs - reshape and move to gpu
                 query_input_ids = sample_batch.query.input_ids.squeeze(1).to(self.device)
-                query_segment = sample_batch.query.segments.squeeze(1).to(self.device)
                 query_attn_mask = sample_batch.query.attn_mask.squeeze(1).to(self.device)
                 # evidence inputs - reshape and move to gpu
                 evid_input_ids = torch.flatten(sample_batch.evid.input_ids, 0, 1).to(self.device)
-                evid_segment = torch.flatten(sample_batch.evid.segments, 0, 1).to(self.device)
                 evid_attn_mask = torch.flatten(sample_batch.evid.attn_mask, 0, 1).to(self.device)
                 # positive evidence position info
                 is_positive = sample_batch.is_positive
@@ -97,24 +91,19 @@ class BiEncoderTrainer():
                 loss.backward()
                 optimizer.step()
 
-                trained_sample += len(query_input_ids)
+                batch_trained_sample += len(query_input_ids)
                 # print info and store history
-                if index_batch % 10 == 0:
-                    print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
+                if index_batch % 10 == 0 or batch_trained_sample == size:
+                    print(f"loss: {loss:>7f}  [{batch_trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
-                elif trained_sample == size:
-                    print(f"loss: {loss:>7f}  [{trained_sample:>5d}/{size:>5d}]")
-                    batch_loss.append(float(loss))
+                
+                del query_input_ids, query_attn_mask, query_vector, evid_input_ids, evid_attn_mask, evid_vector 
 
-            train_loss_history.append(batch_loss)
+            self.train_loss_history.append(batch_loss)
             print()
         
-        del query_input_ids, query_segment, query_attn_mask, evid_input_ids, evid_segment, evid_attn_mask
-        del query_vector, evid_vector
-        
-        self.train_loss_history = train_loss_history
         print("Training Done!")
-        return train_loss_history
+        return self.train_loss_history
 
 
     def select_loss_func(self, loss_func_type: str):
@@ -134,7 +123,7 @@ class BiEncoderTrainer():
     def dot_similarity(self, query_vec: T, evidence_vec: T):
         # in-batch negative sampling is done by 
         # taking thte dot product of query_vec and the transpose of evidence_vec
-        return torch.matmul(query_vec, evidence_vec.transpose(dim0=0, dim1=1))
+        return torch.mm(query_vec, evidence_vec.transpose(dim0=0, dim1=1))
 
 
     def cosine_similarity(self, query_vec: T, evidence_vec: T):
@@ -147,7 +136,7 @@ class BiEncoderTrainer():
 
 
     def negative_likelihood_loss(self, query_vector: T, evidence_vector: T, is_positive: T):        
-        similarity_func = self.select_similarity_func(self.similarity_func_type)
+        similarity_func = self.select_similarity_func(self.model.similarity_func_type)
 
         # calculate similarity score
         similarity_score = similarity_func(query_vec=query_vector, evidence_vec=evidence_vector)
@@ -157,12 +146,13 @@ class BiEncoderTrainer():
         # compute log softmax score
         log_softmax_score = - F.log_softmax(similarity_score, dim=1).to(self.device)
         
+        positive_log_softmax_score = torch.sum(log_softmax_score * positive_mask, dim=-1)
+        
         # return negative log likelihood of the positive evidences
-        return torch.mean(log_softmax_score * positive_mask).to(self.device)
+        return torch.mean(positive_log_softmax_score).to(self.device)
 
     
     def create_positive_mask(self, is_positive, shape):
-        
         mask = torch.zeros(shape)
         
         for idx, positive_end in enumerate(is_positive):
