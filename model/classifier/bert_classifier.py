@@ -31,12 +31,12 @@ class BertClassifier(nn.Module):
         
     def forward(self, input_ids: T, token_type_ids: T, attention_mask: T, return_dict: bool=True):
         
-        out = self.bert_layer(input_ids=input_ids,
+        x = self.bert_layer(input_ids=input_ids,
                               token_type_ids=token_type_ids,
                               attention_mask=attention_mask,
-                              return_dict=return_dict)
+                              return_dict=return_dict).pooler_output
         
-        x = self.linear_layer(out.pooler_output)
+        x = self.linear_layer(x)
         x = self.activation(x)
         logit = self.linear_output(x)
         
@@ -51,7 +51,7 @@ class BertClassifier(nn.Module):
         claim_dataloader = DataLoader(claim_dataset,
                                       batch_size=batch_size,
                                       shuffle=False,
-                                      num_workers=2,
+                                      num_workers=4,
                                       collate_fn=claim_dataset.predict_collate_fn)
     
         for batch_claim_sample in tqdm(claim_dataloader):
@@ -73,7 +73,7 @@ class BertClassifier(nn.Module):
                 for tag, predict_idx in zip(query_tag, predict_idxs):
                     predictions[tag] = IDX_TO_CLASS[predict_idx.tolist()]
             
-            del text_sequence_input_ids, text_sequence_segments, text_sequence_attn_mask, logit        
+            del text_sequence_input_ids, text_sequence_segments, text_sequence_attn_mask, logit, predict_idxs       
         
         self.train()
         if output_file_path is not None:

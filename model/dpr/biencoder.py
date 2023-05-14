@@ -12,7 +12,7 @@ from .biencoder_dataset import BiEncoderDataset
 
 
 class BiEncoder(nn.Module):
-    def __init__(self, query_model: nn.Module, evid_model: nn.Module=None) -> None:
+    def __init__(self, query_model: nn.Module, evid_model: nn.Module=None, similarity_func_type: str=None) -> None:
         super(BiEncoder, self).__init__()
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -31,6 +31,8 @@ class BiEncoder(nn.Module):
         #     for module in modules_1:
         #         for param in module.parameters():
         #             param.requires_grad = False 
+        
+        self.similarity_func_type = similarity_func_type
 
 
     def forward(self, query_ids, query_attn_mask, evid_ids, evid_attn_mask) -> Tuple[T, T]:
@@ -70,15 +72,12 @@ class BiEncoder(nn.Module):
         return sequence, pooler_output, hidden_state
     
     
-    def encode_query(self, input_ids: T, segments: T, attent_mask: T):
+    def encode_query(self, input_ids: T, attent_mask: T):
             
         self.encoder_0.eval()
-        with torch.no_grad():
-            out = self.encoder_0(input_ids=input_ids,
-                                 token_type_ids=segments,
-                                 attention_mask=attent_mask)
-        
-        query_pooler_output = out.pooler_output
+        _sequence, query_pooler_output, _hidden_state = self.get_representation(self.encoder_0, 
+                                                                          ids=input_ids, 
+                                                                          attent_mask=attent_mask)
         
         self.encoder_0.train()
 
@@ -90,11 +89,11 @@ class BiEncoder(nn.Module):
         if self.encoder_1 is not None:
 
             self.encoder_1.eval()
-            with torch.no_grad():
-                out = self.encoder_1(input_ids=input_ids,
-                                     attention_mask=attent_mask)
             
-            evid_pooler_output = out.pooler_output
+            _seq, evid_pooler_output, _hidden = self.get_representation(self.encoder_1, 
+                                                                        ids=input_ids, 
+                                                                        attent_mask=attent_mask)
+            
             self.encoder_1.train()
         else:
             evid_pooler_output = self.encode_query(input_ids=input_ids,
@@ -103,36 +102,40 @@ class BiEncoder(nn.Module):
         return evid_pooler_output
     
     
-    def get_evidence_embed(self, evidence_dataset: EvidenceDataset=None, batch_size: int=64, output_file_path: str=None):
+    def get_evidence_embed(self, 
+                           evidence_dataset: EvidenceDataset=None, 
+                           batch_size: int=64, 
+                           output_file_path: str=None):
+        
         evidence_embed = []
         evidence_tag = []
         
         evidence_dataloader = DataLoader(evidence_dataset,
                                          batch_size=batch_size,
                                          shuffle=False,
+                                         num_workers=4,
                                          collate_fn=evidence_dataset.tok_evidence_collate_fn)
-        with torch.no_grad():
-            for batch_sample in tqdm(evidence_dataloader):
-                evidence = batch_sample.evidence_tok
-                
-                evid_input_ids = evidence.input_ids.squeeze(1).to(self.device)
-                evid_attent_mask = evidence.attn_mask.squeeze(1).to(self.device)
-                
-                evid_embed = self.encode_evidence(input_ids=evid_input_ids,
-                                                  attent_mask=evid_attent_mask)
-                
-                evid_embed_cpu = F.normalize(evid_embed, p=2, dim=-1).cpu()
-                
-                del evid_embed, evid_input_ids, evid_segments, evid_attent_mask
-                
-                evidence_embed.append(evid_embed_cpu)
-                evidence_tag.extend(batch_sample.tag)
+        
+        for batch_sample in tqdm(evidence_dataloader):
+            evidence = batch_sample.evidence_tok
             
+            evid_input_ids = evidence.input_ids.squeeze(1).to(self.device)
+            evid_attent_mask = evidence.attn_mask.squeeze(1).to(self.device)
+            
+            evid_embed = self.encode_evidence(input_ids=evid_input_ids,
+                                              attent_mask=evid_attent_mask)
+            
+            evid_embed_cpu = evid_embed.cpu()
+            
+            del evid_embed, evid_input_ids, evid_attent_mask
+            
+            evidence_embed.append(evid_embed_cpu)
+            evidence_tag.extend(batch_sample.tag)
+        
         evidence_embed = torch.cat(evidence_embed, dim=0)
         
-        evid_embed_dict = {tag: embed.tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
-        
         if output_file_path is not None:
+            evid_embed_dict = {tag: embed.tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
             print("Exporting...")
             f_out = open("data/output/embed-evidence.json", 'w')
             json.dump(evid_embed_dict, f_out)
@@ -143,18 +146,28 @@ class BiEncoder(nn.Module):
         evid_embed_dict = {"tag": evidence_tag.tolist(), "evidence": evidence_embed.tolist()}
         del evidence_tag, evidence_embed
         print("Embedding Done!")
+        
         return evid_embed_dict
 
 
-    def retrieve(self, claim_dataset: BiEncoderDataset, embed_evid_data: dict, batch_size: int=64, k: int=5, predict_output_path: str=None):
+    def retrieve(self, 
+                 claim_dataset: BiEncoderDataset, 
+                 embed_evid_data: dict, 
+                 batch_size: int=64, 
+                 k: int=5, 
+                 predict_output_path: str=None):
         
         claim_dataloader = DataLoader(claim_dataset, 
                                       batch_size=batch_size,
                                       shuffle=False,
-                                      num_workers=2,
+                                      num_workers=4,
                                       collate_fn=claim_dataset.predict_collate_fn)
         
-        evid_embed = torch.tensor(embed_evid_data["evidence"]).t().to(self.device)
+        if self.similarity_func_type == "dot":
+            evid_embed = torch.tensor(embed_evid_data["evidence"]).t().to(self.device)
+        elif self.similarity_func_type == "cosine":
+            evid_embed = F.normalize(torch.tensor(embed_evid_data["evidence"]), p=2, dim=-1).t().to(self.device)
+        
         tags = embed_evid_data["tag"]
         
         predictions = {}
@@ -167,18 +180,21 @@ class BiEncoder(nn.Module):
             query_input_ids = query.input_ids.squeeze(1).to(self.device)
             query_attn_mask = query.attn_mask.squeeze(1).to(self.device)
             
-            with torch.no_grad():
-                query_embed = self.encode_query(input_ids=query_input_ids,
-                                                attent_mask=query_attn_mask)
-                
-                similarity_score = torch.matmul(F.normalize(query_embed, p=2, dim=-1), evid_embed)
 
-                top_ks = torch.topk(similarity_score, k=k, dim=1).indices.tolist()
+            query_embed = self.encode_query(input_ids=query_input_ids,
+                                            attent_mask=query_attn_mask)
             
-                for query_tag, top_k in zip(query_tags, top_ks):
-                    predictions[query_tag] = [tags[idx] for idx in top_k]
+            if self.similarity_func_type == "dot":
+                similarity_score = torch.mm(query_embed, evid_embed)
+            elif self.similarity_func_type == "cosine":
+                similarity_score = torch.mm(F.normalize(query_embed, p=2, dim=-1), evid_embed)
+
+            top_ks_idxs = torch.topk(similarity_score, k=k, dim=1).indices.tolist()
+        
+            for query_tag, top_k_idx in zip(query_tags, top_ks_idxs):
+                predictions[query_tag] = [tags[idx] for idx in top_k_idx]
                 
-            del query_input_ids, query_segments, query_attn_mask, query_embed, similarity_score, top_ks
+            del query_input_ids, query_attn_mask, query_embed, similarity_score, top_ks_idxs
         
         del evid_embed
         
