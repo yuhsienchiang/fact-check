@@ -2,11 +2,11 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from .bert_classifier import BertClassifier
+from .classifier import Classifier
 
 class BertClassifierTrainer():
     def __init__(self,
-                 classifier: BertClassifier=None,
+                 classifier: Classifier=None,
                  batch_size: int=64) -> None:
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -55,7 +55,7 @@ class BertClassifierTrainer():
                 
                 text_sequences = sample_batch.text_sequence
                 text_sequences_input_ids = text_sequences.input_ids.squeeze(1).to(self.device) 
-                text_sequences_token_type_ids = text_sequences.segments.squeeze(1).to(self.device) 
+                text_sequences_token_type_ids = text_sequences.segments.squeeze(1).to(self.device) if text_sequences.segments is not None else None
                 text_sequences_attention_mask = text_sequences.attn_mask.squeeze(1).to(self.device) 
                 labels = sample_batch.query_label.to(self.device)
                 
@@ -75,7 +75,9 @@ class BertClassifierTrainer():
                     print(f"loss: {loss:>7f}  [{batch_trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
                 
-                del logit, loss, labels, text_sequences_input_ids, text_sequences_token_type_ids, text_sequences_attention_mask
+                del logit, loss, labels, text_sequences_input_ids, text_sequences_attention_mask
+                if text_sequences_token_type_ids is not None:
+                    del text_sequences_token_type_ids
                 
             self.train_loss_history.append(batch_loss)
             print()

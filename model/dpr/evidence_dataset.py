@@ -3,18 +3,18 @@ import pandas as pd
 
 import torch
 from torch.utils.data import Dataset
-from transformers import BertTokenizer
+from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
 
 EvidenceDataSample = namedtuple('EvidenceDataSample', ["tag", "evidence"])
-EvidenceDataPassage = namedtuple('EvidenceDataPassage', ['input_ids', 'segments', 'attn_mask'])
+EvidenceDataPassage = namedtuple('EvidenceDataPassage', ['input_ids', 'attn_mask'])
 EvidenceEmbedDataSample = namedtuple('EvidenceEmbedDataSample', ["tag", "evidence_embed"])
 EvidenceTokDataSample = namedtuple('EvidenceTokDataSample', ["tag", "evidence_tok"])
 
 class EvidenceDataset(Dataset):
     def __init__(self,
                  evidence_file_path: str,
-                 tokenizer: BertTokenizer=None,
+                 tokenizer: PreTrainedTokenizer=None,
                  lower_case :bool=False,
                  max_padding_length: int=12,
                  rand_seed: int=None) -> None:
@@ -23,7 +23,7 @@ class EvidenceDataset(Dataset):
         
         self.evidence_file_path = evidence_file_path
 
-        self.tokenizer = tokenizer if tokenizer else BertTokenizer.from_pretrained("bert-base-uncased")
+        self.tokenizer = tokenizer if tokenizer else AutoTokenizer.from_pretrained("bert-base-uncased", use_fast=False)
         
         self.lower_case = lower_case
         self.max_padding_length = max_padding_length
@@ -60,12 +60,15 @@ class EvidenceDataset(Dataset):
 
 
     def clean_text(self, context: str, lower_case: bool=False) -> str:
+        
+        context = context.replace("`", "'")
+        context = context.replace(" 's", "'s")
+        
         return context.lower() if lower_case else context
 
     
     def tok_evidence_collate_fn(self, batch):
         batch_evid_input_ids = []
-        batch_evid_segments = []
         batch_evid_attn_mask = []
         batch_evid_tag = []
         
@@ -82,12 +85,10 @@ class EvidenceDataset(Dataset):
                                                return_tensors='pt')
             
             batch_evid_input_ids.append(evidence_encoding.input_ids)
-            batch_evid_segments.append(evidence_encoding.token_type_ids)
             batch_evid_attn_mask.append(evidence_encoding.attention_mask)
             batch_evid_tag.append(evidence_tag)
         
         evidence_passage = EvidenceDataPassage(input_ids=torch.stack(batch_evid_input_ids, dim=0),
-                                               segments=torch.stack(batch_evid_segments, dim=0),
                                                attn_mask=torch.stack(batch_evid_attn_mask, dim=0))
          
         return EvidenceTokDataSample(tag=batch_evid_tag,

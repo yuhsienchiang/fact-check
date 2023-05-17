@@ -20,18 +20,6 @@ class BiEncoder(nn.Module):
         self.encoder_0 = query_model.to(self.device)
         self.encoder_1 = evid_model.to(self.device) if evid_model is not None else None
         
-        # freeze encoder layer param
-        # modules_0 = [self.encoder_0.embeddings, *self.encoder_0.encoder.layer[:1]]
-        # for module in modules_0:
-        #     for param in module.parameters():
-        #         param.requires_grad = False
-                
-        # if self.encoder_1 is not None:
-        #     modules_1 = [self.encoder_1.embeddings, *self.encoder_1.encoder.layer[:1]]
-        #     for module in modules_1:
-        #         for param in module.parameters():
-        #             param.requires_grad = False 
-        
         self.similarity_func_type = similarity_func_type
 
 
@@ -58,14 +46,12 @@ class BiEncoder(nn.Module):
         
         if sub_model.training:
             out = sub_model(input_ids=ids,
-                            attention_mask=attent_mask,
-                            return_dict=True)
+                            attention_mask=attent_mask)
 
         else:
             with torch.no_grad():
                 out = sub_model(input_ids=ids,
-                                attention_mask=attent_mask,
-                                return_dict=True)
+                                attention_mask=attent_mask)
         
         sequence = out.last_hidden_state
         pooler_output = out.pooler_output
@@ -78,8 +64,8 @@ class BiEncoder(nn.Module):
             
         self.encoder_0.eval()
         _sequence, query_pooler_output, _hidden_state = self.get_representation(self.encoder_0, 
-                                                                          ids=input_ids, 
-                                                                          attent_mask=attent_mask)
+                                                                                ids=input_ids, 
+                                                                                attent_mask=attent_mask)
         
         self.encoder_0.train()
 
@@ -95,8 +81,8 @@ class BiEncoder(nn.Module):
             _seq, evid_pooler_output, _hidden = self.get_representation(self.encoder_1, 
                                                                         ids=input_ids, 
                                                                         attent_mask=attent_mask)
-            
             self.encoder_1.train()
+            
         else:
             evid_pooler_output = self.encode_query(input_ids=input_ids,
                                                    attent_mask=attent_mask)
@@ -135,10 +121,10 @@ class BiEncoder(nn.Module):
             evidence_tag.extend(batch_sample.tag)
         
         evidence_embed = torch.cat(evidence_embed, dim=0)
-        
+
         if output_file_path is not None:
-            evid_embed_dict = {tag: embed.tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
             print("Exporting...")
+            evid_embed_dict = {tag: embed.tolist() for tag, embed in zip(evidence_tag, evidence_embed)}
             f_out = open("data/output/embed-evidence.json", 'w')
             json.dump(evid_embed_dict, f_out)
             f_out.close()
@@ -148,7 +134,6 @@ class BiEncoder(nn.Module):
         evid_embed_dict = {"tag": evidence_tag, "evidence": evidence_embed.tolist()}
         del evidence_tag, evidence_embed
         print("Embedding Done!")
-        
         return evid_embed_dict
 
 

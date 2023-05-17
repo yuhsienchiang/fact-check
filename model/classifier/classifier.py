@@ -6,35 +6,40 @@ from torch.utils.data import DataLoader
 from torch import Tensor as T
 from torch import nn
 import transformers
-from transformers import BertModel
-from .bert_classifier_dataset import BertClassifierDataset
+from transformers import AutoModel
+from .classifier_dataset import ClassifierDataset
 
 CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
 IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
 
-class BertClassifier(nn.Module):
+class Classifier(nn.Module):
     
-    def __init__(self) -> None:
-        super(BertClassifier, self).__init__()
+    def __init__(self, model_type: str="bert-base-uncased") -> None:
+        super(Classifier, self).__init__()
         
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
         # suppress undesirable warning message
         transformers.logging.set_verbosity_error() 
         
-        self.bert_layer = BertModel.from_pretrained("bert-base-uncased").to(self.device)
+        self.PLM_layer = AutoModel.from_pretrained(model_type).to(self.device)
         hidden_size = self.bert_layer.config.hidden_size
         self.linear_layer = nn.Linear(hidden_size, hidden_size).to(self.device)
         self.activation = nn.Tanh().to(self.device)
         self.linear_output = nn.Linear(hidden_size, 4).to(self.device)
         
         
-    def forward(self, input_ids: T, token_type_ids: T, attention_mask: T, return_dict: bool=True):
+    def forward(self, input_ids: T, attention_mask: T, token_type_ids: T=None, return_dict: bool=True):
         
-        x = self.bert_layer(input_ids=input_ids,
-                              token_type_ids=token_type_ids,
-                              attention_mask=attention_mask,
-                              return_dict=return_dict).pooler_output
+        if token_type_ids is not None:
+            x = self.PLM(input_ids=input_ids,
+                         token_type_ids=token_type_ids,
+                         attention_mask=attention_mask,
+                         return_dict=return_dict).pooler_output
+        else:
+           x = self.PLM(input_ids=input_ids,
+                         attention_mask=attention_mask,
+                         return_dict=return_dict).pooler_output 
         
         x = self.linear_layer(x)
         x = self.activation(x)
@@ -43,7 +48,7 @@ class BertClassifier(nn.Module):
         return logit
 
 
-    def predict(self, claim_dataset: BertClassifierDataset, batch_size: int, output_file_path: str=None):
+    def predict(self, claim_dataset: ClassifierDataset, batch_size: int, output_file_path: str=None):
     
         self.eval()
         
@@ -61,7 +66,7 @@ class BertClassifier(nn.Module):
             with torch.no_grad():
                 
                 text_sequence_input_ids = text_sequence.input_ids.squeeze(1).to(self.device)
-                text_sequence_segments = text_sequence.segments.squeeze(1).to(self.device)
+                text_sequence_segments = text_sequence.segments.squeeze(1).to(self.device) if text_sequence.segments is not None else None
                 text_sequence_attn_mask = text_sequence.attn_mask.squeeze(1).to(self.device)
                 
                 logit = self.__call__(input_ids=text_sequence_input_ids,
@@ -73,7 +78,9 @@ class BertClassifier(nn.Module):
                 for tag, predict_idx in zip(query_tag, predict_idxs):
                     predictions[tag] = IDX_TO_CLASS[predict_idx.tolist()]
             
-            del text_sequence_input_ids, text_sequence_segments, text_sequence_attn_mask, logit, predict_idxs       
+            del text_sequence_input_ids, text_sequence_attn_mask, logit, predict_idxs
+            if text_sequence_segments is not None:
+                del text_sequence_segment
         
         self.train()
         if output_file_path is not None:

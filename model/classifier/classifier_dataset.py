@@ -3,30 +3,30 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 import transformers
-from transformers import BertTokenizer
+from transformers import PreTrainedTokenizer, AutoTokenizer, BertTokenizer
 from collections import namedtuple
 
-BertClassifierSample = namedtuple('BertClassifierSample', ['query_tag', 'query_text', 'query_label', 'evid_tag', 'evid_text'])
-BertClassifierTrainSample = namedtuple('BertClassifierTrainSample', ['query_tag', 'query_label', 'text_sequence'])
-BertClassifierPredictSample = namedtuple('BertClassifierPredictSample', ['query_tag', 'text_sequence'])
-BertClassifierPassage = namedtuple('BertClassifierPassage', ['input_ids', 'segments', 'attn_mask'])
+ClassifierSample = namedtuple('ClassifierSample', ['query_tag', 'query_text', 'query_label', 'evid_tag', 'evid_text'])
+ClassifierTrainSample = namedtuple('ClassifierTrainSample', ['query_tag', 'query_label', 'text_sequence'])
+ClassifierPredictSample = namedtuple('ClassifierPredictSample', ['query_tag', 'text_sequence'])
+ClassifierPassage = namedtuple('ClassifierPassage', ['input_ids', 'segments', 'attn_mask'])
 
 CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
 IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
 
 
-class BertClassifierDataset(Dataset):
+class ClassifierDataset(Dataset):
     def __init__(self,
                  claim_file_path: str,
                  data_type: str,
                  evidence_file_path: str=None,
                  predict_evidence_file_path: str=None,
-                 tokenizer: BertTokenizer=None,
+                 tokenizer: PreTrainedTokenizer=None,
                  lower_case: bool=False,
                  max_padding_length: int=12,
                  rand_seed: int=None) -> None:
         
-        super(BertClassifierDataset, self).__init__()
+        super(ClassifierDataset, self).__init__()
         
         self.claim_file_path = claim_file_path
         self.evidence_file_path = evidence_file_path
@@ -34,7 +34,8 @@ class BertClassifierDataset(Dataset):
         
         self.predict = True if data_type == "predict" else False
         
-        self.tokenizer = tokenizer if tokenizer else BertTokenizer.from_pretrained("bert-base-uncased")
+        self.tokenizer = tokenizer if tokenizer else AutoTokenizer.from_pretrained("bert-base-uncased",
+                                                                                   use_fast=False)
         
         self.lower_case = lower_case
         self.max_padding_length = max_padding_length
@@ -68,11 +69,11 @@ class BertClassifierDataset(Dataset):
         evidence_text = [self.clean_text(evid, lower_case=self.lower_case) 
                          for evid in map(self.raw_evidence_data.get, evidence_tag)]
         
-        return BertClassifierSample(query_tag=query_tag,
-                                    query_label=query_label,
-                                    query_text=query_text,
-                                    evid_tag=evidence_tag,
-                                    evid_text=evidence_text)
+        return ClassifierSample(query_tag=query_tag,
+                                query_label=query_label,
+                                query_text=query_text,
+                                evid_tag=evidence_tag,
+                                evid_text=evidence_text)
     
     
     def load_data(self) -> None:
@@ -105,7 +106,7 @@ class BertClassifierDataset(Dataset):
         self.evidences_data = pd.json_normalize(normalized_evidence_data)
         
         
-    def clean_text(self, context: str, lower_case: bool=False) -> str:
+    def clean_text(self, context: str, lower_case: bool=False) -> str:        
         return context.lower() if lower_case else context
     
     
@@ -132,18 +133,20 @@ class BertClassifierDataset(Dataset):
                                   return_tensors="pt")
         
             batch_text_sequence_input_ids.append(encoding.input_ids)
-            batch_text_sequence_segments.append(encoding.token_type_ids) 
             batch_text_sequence_attn_mask.append(encoding.attention_mask) 
+            if isinstance(self.tokenizer, BertTokenizer):
+                batch_text_sequence_segments.append(encoding.token_type_ids)
+            
             batch_label.append(label)
             batch_tag.append(tag)
             
-            text_sequences_passage = BertClassifierPassage(input_ids=torch.stack(batch_text_sequence_input_ids, dim=0),
-                                                           segments=torch.stack(batch_text_sequence_segments, dim=0),
-                                                           attn_mask=torch.stack(batch_text_sequence_attn_mask, dim=0))
+            text_sequences_passage = ClassifierPassage(input_ids=torch.stack(batch_text_sequence_input_ids, dim=0),
+                                                       segments=torch.stack(batch_text_sequence_segments, dim=0) if batch_text_sequence_segments else None,
+                                                       attn_mask=torch.stack(batch_text_sequence_attn_mask, dim=0))
         
-        return BertClassifierTrainSample(text_sequence=text_sequences_passage,
-                                         query_label=torch.tensor(batch_label),
-                                         query_tag=batch_tag)
+        return ClassifierTrainSample(text_sequence=text_sequences_passage,
+                                     query_label=torch.tensor(batch_label),
+                                     query_tag=batch_tag)
     
     
     def predict_collate_fn(self, batch): 
@@ -167,14 +170,16 @@ class BertClassifierDataset(Dataset):
                                   return_tensors="pt")
         
             batch_text_sequence_input_ids.append(encoding.input_ids)
-            batch_text_sequence_segments.append(encoding.token_type_ids) 
             batch_text_sequence_attn_mask.append(encoding.attention_mask) 
+            if isinstance(self.tokenizer, BertTokenizer):
+                batch_text_sequence_segments.append(encoding.token_type_ids) 
+            
             batch_tag.append(tag)
             
-            text_sequences_passage = BertClassifierPassage(input_ids=torch.stack(batch_text_sequence_input_ids, dim=0),
-                                                           segments=torch.stack(batch_text_sequence_segments, dim=0),
-                                                           attn_mask=torch.stack(batch_text_sequence_attn_mask, dim=0))
+            text_sequences_passage = ClassifierPassage(input_ids=torch.stack(batch_text_sequence_input_ids, dim=0),
+                                                       segments=torch.stack(batch_text_sequence_segments, dim=0) if batch_text_sequence_segments else None,
+                                                       attn_mask=torch.stack(batch_text_sequence_attn_mask, dim=0))
         
-        return BertClassifierPredictSample(text_sequence=text_sequences_passage,
+        return ClassifierPredictSample(text_sequence=text_sequences_passage,
                                            query_tag=batch_tag)
     

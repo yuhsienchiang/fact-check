@@ -2,7 +2,7 @@ import json
 import pandas as pd
 import torch
 from torch.utils.data import Dataset
-from transformers import BertTokenizer
+from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
 
 BiEncoderTrainSample = namedtuple('BiEncoderTrainSample', ['query', 'evid', 'is_positive'])
@@ -17,7 +17,7 @@ class BiEncoderDataset(Dataset):
                  claim_file_path: str,
                  data_type: str,
                  evidence_file_path: str=None,
-                 tokenizer: BertTokenizer=None,
+                 tokenizer: PreTrainedTokenizer=None,
                  lower_case :bool=False,
                  max_padding_length: int=12,
                  evidence_num: int=None,
@@ -30,7 +30,8 @@ class BiEncoderDataset(Dataset):
         
         self.predict = True if data_type == "predict" else False
 
-        self.tokenizer = tokenizer if tokenizer else BertTokenizer.from_pretrained("bert-base-uncased")
+        self.tokenizer = tokenizer if tokenizer else AutoTokenizer.from_pretrained("bert-base-uncased", 
+                                                                                   use_fast=False)
 
         self.lower_case = lower_case
         self.max_padding_length = max_padding_length
@@ -102,15 +103,15 @@ class BiEncoderDataset(Dataset):
 
 
     def clean_text(self, context: str, lower_case: bool=False) -> str:
+        context = context.replace("`", "'")
+        context = context.replace(" 's", "'s")
         return context.lower() if lower_case else context
     
 
     def train_collate_fn(self, batch):
         batch_query_input_ids = []
-        batch_query_segments = []
         batch_query_attn_mask = []
         batch_evid_input_ids = []
-        batch_evid_segments = []
         batch_evid_attn_mask = []
         batch_is_positive = []
 
@@ -127,7 +128,6 @@ class BiEncoderDataset(Dataset):
                                              return_tensors='pt')
             
             batch_query_input_ids.append(query_tokenized.input_ids)
-            batch_query_segments.append(query_tokenized.token_type_ids)
             batch_query_attn_mask.append(query_tokenized.attention_mask)
             
 
@@ -153,16 +153,13 @@ class BiEncoderDataset(Dataset):
                                             return_tensors='pt')
             
             batch_evid_input_ids.append(evid_tokenized.input_ids)
-            batch_evid_segments.append(evid_tokenized.token_type_ids)
             batch_evid_attn_mask.append(evid_tokenized.attention_mask)
             batch_is_positive.append(is_positive)
             
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       segments=torch.stack(batch_query_segments, dim=0),
                                        attn_mask=torch.stack(batch_query_attn_mask, dim=0))
         
         batch_evid = BiEncoderPassage(input_ids=torch.stack(batch_evid_input_ids, dim=0),
-                                      segments=torch.stack(batch_evid_segments, dim=0),
                                       attn_mask=torch.stack(batch_evid_attn_mask, dim=0))
         
         return BiEncoderTrainSample(query=batch_query,
@@ -172,7 +169,6 @@ class BiEncoderDataset(Dataset):
     
     def evaluate_collate_fn(self, batch):
         batch_query_input_ids = []
-        batch_query_segments = []
         batch_query_attn_mask = []
         batch_evid_tag = []
         
@@ -188,13 +184,11 @@ class BiEncoderDataset(Dataset):
                                              return_tensors='pt')
 
            batch_query_input_ids.append(query_tokenized.input_ids)
-           batch_query_segments.append(query_tokenized.token_type_ids)
            batch_query_attn_mask.append(query_tokenized.attention_mask)
 
            batch_evid_tag.append(evid_tag)
 
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       segments=torch.stack(batch_query_segments, dim=0),
                                        attn_mask=torch.stack(batch_query_attn_mask, dim=0))
 
         return BiEncoderEvaluateSample(query=batch_query,
@@ -203,7 +197,6 @@ class BiEncoderDataset(Dataset):
         
     def predict_collate_fn(self, batch):
         batch_query_input_ids = []
-        batch_query_segments = []
         batch_query_attn_mask = []
         batch_query_tag = []
         
@@ -219,13 +212,11 @@ class BiEncoderDataset(Dataset):
                                              return_tensors='pt')
 
            batch_query_input_ids.append(query_tokenized.input_ids)
-           batch_query_segments.append(query_tokenized.token_type_ids)
            batch_query_attn_mask.append(query_tokenized.attention_mask)
 
            batch_query_tag.append(query_tag)
 
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       segments=torch.stack(batch_query_segments, dim=0),
                                        attn_mask=torch.stack(batch_query_attn_mask, dim=0))
 
         return BiEncoderPredictSample(query=batch_query,
