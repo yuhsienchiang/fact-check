@@ -5,11 +5,15 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
 
+from data.utils import load_data
+
+BiEncoderSample = namedtuple('BiEncoderSample', ['query_tag', 'query_label', 'query_text', 'evid_tag', 'evid_text'])
+BiEncoderPassage = namedtuple('BiEncoderPassage', ['tag', 'input_ids', 'attention_mask'])
 BiEncoderTrainSample = namedtuple('BiEncoderTrainSample', ['query', 'evid', 'is_positive'])
 BiEncoderEvaluateSample = namedtuple('BiEncoderEvaluateSample', ['query', 'evid_tag'])
 BiEncoderPredictSample = namedtuple('BiEncoderPredictSample', ['query', 'query_tag'])
-BiEncoderSample = namedtuple('BiEncoderSample', ['query_text', 'query_tag', 'evid_text', 'evid_tag'])
-BiEncoderPassage = namedtuple('BiEncoderPassage', ['input_ids', 'segments', 'attn_mask'])
+
+
 
 
 class BiEncoderDataset(Dataset):
@@ -28,7 +32,7 @@ class BiEncoderDataset(Dataset):
         self.claim_file_path = claim_file_path
         self.evidence_file_path = evidence_file_path
         
-        self.predict = True if data_type == "predict" else False
+        self.data_type = data_type
 
         self.tokenizer = tokenizer if tokenizer else AutoTokenizer.from_pretrained("bert-base-uncased", 
                                                                                    use_fast=False)
@@ -43,9 +47,9 @@ class BiEncoderDataset(Dataset):
         self.claim_data = None
         self.evidences_data = None
         
-        self.load_data()
+        self._load_data()
 
-        if self.predict is False:
+        if self.data_type == "train":
             self.max_positive_num = self.claim_data["evidence"].apply(lambda x: len(x)).max()
             self.evidence_num = max(evidence_num, self.max_positive_num) if evidence_num is not None else self.max_positive_num
 
@@ -62,44 +66,31 @@ class BiEncoderDataset(Dataset):
         # extract query text and apply cleaning
         query_text = self.clean_text(data["claim_text"], lower_case=self.lower_case)
         
+        query_label = data["label"] if self.data_type == "train" else None
+        
         # extract evidence_tag
-        evidence_tag = data["evidence"] if self.predict is False else None
+        evidence_tag = data["evidence"] if self.data_type == "train" else None
         # extract evidence text and apply cleaning
         evidence_text = [self.clean_text(evid, lower_case=self.lower_case) 
-                         for evid in map(self.raw_evidence_data.get, evidence_tag)] if self.predict is False else None
-            
-        return BiEncoderSample(query_text=query_text,
-                               query_tag=query_tag,
-                               evid_text=evidence_text,
-                               evid_tag=evidence_tag)
+                         for evid in map(self.raw_evidence_data.get, evidence_tag)] if self.data_type == "train" else None
+        
+        return BiEncoderSample(query_tag=query_tag,
+                               query_label=query_label,
+                               query_text=query_text,
+                               evid_tag=evidence_tag,
+                               evid_text=evidence_text)
             
     
-    def load_data(self) -> None:
-
-        self.raw_claim_data = json.load(open(self.claim_file_path))
-
-        if self.predict is False:
-            self.raw_evidence_data = json.load(open(self.evidence_file_path))   
-            normalized_evidence_data = [{"tag": key, 
-                                         "evidence": value
-                                         } 
-                                        for (key, value) in self.raw_evidence_data.items()]
-            self.evidences_data = pd.json_normalize(normalized_evidence_data)    
-            
-            normalized_claim_data = [{"tag": key,
-                                      "claim_text": value["claim_text"],
-                                      "claim_label": value["claim_label"],
-                                      "evidence": value["evidences"]
-                                      } 
-                                     for (key, value) in self.raw_claim_data.items()] 
-        else:
-            normalized_claim_data = [{"tag": key,
-                                      "claim_text": value["claim_text"],
-                                      } 
-                                     for (key, value) in self.raw_claim_data.items()] 
-            
-        self.claim_data = pd.json_normalize(normalized_claim_data)
+    def _load_data(self) -> None:
         
+        
+        raw_claim_data, raw_evidence_data, claim_data, evidence_data = load_data(claim_data_path=self.claim_file_path,
+                                                                                 evidence_data_path=self.evidence_file_path,
+                                                                                 data_type=self.data_type)
+        self.raw_claim_data = raw_claim_data 
+        self.raw_evidence_data = raw_evidence_data
+        self.claim_data = claim_data
+        self.evidences_data = evidence_data
 
 
     def clean_text(self, context: str, lower_case: bool=False) -> str:
@@ -109,10 +100,12 @@ class BiEncoderDataset(Dataset):
     
 
     def train_collate_fn(self, batch):
+        batch_query_tag = []
         batch_query_input_ids = []
-        batch_query_attn_mask = []
+        batch_query_attention_mask = []
+        batch_evid_tag = []
         batch_evid_input_ids = []
-        batch_evid_attn_mask = []
+        batch_evid_attention_mask = []
         batch_is_positive = []
 
         for batch_sample in batch:
@@ -127,12 +120,14 @@ class BiEncoderDataset(Dataset):
                                              max_length=self.max_padding_length,
                                              return_tensors='pt')
             
+            batch_query_tag.append(batch.query_tag)
             batch_query_input_ids.append(query_tokenized.input_ids)
-            batch_query_attn_mask.append(query_tokenized.attention_mask)
+            batch_query_attention_mask.append(query_tokenized.attention_mask)
             
 
             # prepare positive evid text
             is_positive = len(evid_text)
+            batch_is_positive.append(is_positive)
 
             # prepare negative evid text
             # sample (evidence num - positive evid num) negative evidence
@@ -152,15 +147,15 @@ class BiEncoderDataset(Dataset):
                                             max_length=self.max_padding_length,
                                             return_tensors='pt')
             
+            batch_evid_tag.append(batch.eivd_tag)
             batch_evid_input_ids.append(evid_tokenized.input_ids)
-            batch_evid_attn_mask.append(evid_tokenized.attention_mask)
-            batch_is_positive.append(is_positive)
+            batch_evid_attention_mask.append(evid_tokenized.attention_mask)
             
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       attn_mask=torch.stack(batch_query_attn_mask, dim=0))
+                                       attention_mask=torch.stack(batch_query_attention_mask, dim=0))
         
         batch_evid = BiEncoderPassage(input_ids=torch.stack(batch_evid_input_ids, dim=0),
-                                      attn_mask=torch.stack(batch_evid_attn_mask, dim=0))
+                                      attention_mask=torch.stack(batch_evid_attention_mask, dim=0))
         
         return BiEncoderTrainSample(query=batch_query,
                                     evid=batch_evid,
@@ -169,7 +164,7 @@ class BiEncoderDataset(Dataset):
     
     def evaluate_collate_fn(self, batch):
         batch_query_input_ids = []
-        batch_query_attn_mask = []
+        batch_query_attention_mask = []
         batch_evid_tag = []
         
         for batch_sample in batch:
@@ -184,12 +179,12 @@ class BiEncoderDataset(Dataset):
                                              return_tensors='pt')
 
            batch_query_input_ids.append(query_tokenized.input_ids)
-           batch_query_attn_mask.append(query_tokenized.attention_mask)
+           batch_query_attention_mask.append(query_tokenized.attention_mask)
 
            batch_evid_tag.append(evid_tag)
 
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       attn_mask=torch.stack(batch_query_attn_mask, dim=0))
+                                       attention_mask=torch.stack(batch_query_attention_mask, dim=0))
 
         return BiEncoderEvaluateSample(query=batch_query,
                                        evid_tag=batch_evid_tag)
@@ -197,7 +192,7 @@ class BiEncoderDataset(Dataset):
         
     def predict_collate_fn(self, batch):
         batch_query_input_ids = []
-        batch_query_attn_mask = []
+        batch_query_attention_mask = []
         batch_query_tag = []
         
         for batch_sample in batch:
@@ -212,12 +207,12 @@ class BiEncoderDataset(Dataset):
                                              return_tensors='pt')
 
            batch_query_input_ids.append(query_tokenized.input_ids)
-           batch_query_attn_mask.append(query_tokenized.attention_mask)
+           batch_query_attention_mask.append(query_tokenized.attention_mask)
 
            batch_query_tag.append(query_tag)
 
         batch_query = BiEncoderPassage(input_ids=torch.stack(batch_query_input_ids, dim=0),
-                                       attn_mask=torch.stack(batch_query_attn_mask, dim=0))
+                                       attention_mask=torch.stack(batch_query_attention_mask, dim=0))
 
         return BiEncoderPredictSample(query=batch_query,
                                        query_tag=batch_query_tag)

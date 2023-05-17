@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 
 from .classifier import Classifier
 
-class BertClassifierTrainer():
+class ClassifierTrainer():
     def __init__(self,
                  classifier: Classifier=None,
                  batch_size: int=64) -> None:

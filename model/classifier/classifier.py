@@ -7,10 +7,8 @@ from torch import Tensor as T
 from torch import nn
 import transformers
 from transformers import AutoModel
-from .classifier_dataset import ClassifierDataset
-
-CLASS_TO_IDX = {"SUPPORTS": 0, "REFUTES": 1, "NOT_ENOUGH_INFO": 2, "DISPUTED": 3}
-IDX_TO_CLASS = {0: "SUPPORTS", 1: "REFUTES", 2: "NOT_ENOUGH_INFO", 3: "DISPUTED"}
+from ...data.classifier_dataset import ClassifierDataset
+from ...data.utils import class_label_conv
 
 class Classifier(nn.Module):
     
@@ -76,7 +74,7 @@ class Classifier(nn.Module):
                 predict_idxs = torch.argmax(logit, dim=-1)
                 
                 for tag, predict_idx in zip(query_tag, predict_idxs):
-                    predictions[tag] = IDX_TO_CLASS[predict_idx.tolist()]
+                    predictions[tag] = class_label_conv(predict_idx.tolist())
             
             del text_sequence_input_ids, text_sequence_attn_mask, logit, predict_idxs
             if text_sequence_segments is not None:

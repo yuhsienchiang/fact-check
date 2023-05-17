@@ -3,12 +3,20 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-
-# data files
-data/
-
 # test files
 test/
+
+data/raw_data/
+data/output/bert-cosine-bert/
+data/output/bert-dot-bert/
+data/output/roberta-cosine-roberta/
+data/output/roberta-dot-roberta/
+data/output/simcse-dot-simcse/
+data/output/simcse-cosine-bert/
+data/output/simcse-cosine-simcse/
+data/output/simcse-cosine-roberta/
+
+.vscode
 
 # Installer logs
 pip-log.txt

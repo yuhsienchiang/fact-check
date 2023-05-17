@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from .biencoder import BiEncoder
-from .biencoder_dataset import BiEncoderDataset
+from ...data.biencoder_dataset import BiEncoderDataset
 
 
 class BiEncoderTrainer():

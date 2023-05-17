@@ -7,8 +7,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch import Tensor as T
 from torch.utils.data import DataLoader
-from .evidence_dataset import EvidenceDataset
-from .biencoder_dataset import BiEncoderDataset
+from ...data.evidence_dataset import EvidenceDataset
+from ...data.biencoder_dataset import BiEncoderDataset
 
 
 class BiEncoder(nn.Module):
@@ -102,7 +102,7 @@ class BiEncoder(nn.Module):
                                          batch_size=batch_size,
                                          shuffle=False,
                                          num_workers=4,
-                                         collate_fn=evidence_dataset.tok_evidence_collate_fn)
+                                         collate_fn=evidence_dataset.evidence_collate_fn)
         
         for batch_sample in tqdm(evidence_dataloader):
             evidence = batch_sample.evidence_tok
