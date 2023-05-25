@@ -1,11 +1,9 @@
-import json
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
 
-from data.utils import load_data
+from data.utils import load_data, clean_text
 
 BiEncoderSample = namedtuple(
     "BiEncoderSample",
@@ -77,7 +75,7 @@ class BiEncoderDataset(Dataset):
 
         query_tag = data["tag"]
         # extract query text and apply cleaning
-        query_text = self.clean_text(data["claim_text"], lower_case=self.lower_case)
+        query_text = clean_text(data["claim_text"], lower_case=self.lower_case)
 
         query_label = data["label"] if self.data_type == "train" else None
 
@@ -86,7 +84,7 @@ class BiEncoderDataset(Dataset):
         # extract evidence text and apply cleaning
         evidence_text = (
             [
-                self.clean_text(evid, lower_case=self.lower_case)
+                clean_text(evid, lower_case=self.lower_case)
                 for evid in map(self.raw_evidence_data.get, evidence_tag)
             ]
             if self.data_type == "train"
@@ -111,11 +109,6 @@ class BiEncoderDataset(Dataset):
         self.raw_evidence_data = raw_evidence_data
         self.claim_data = claim_data
         self.evidences_data = evidence_data
-
-    def clean_text(self, context: str, lower_case: bool = False) -> str:
-        context = context.replace("`", "'")
-        context = context.replace(" 's", "'s")
-        return context.lower() if lower_case else context
 
     def train_collate_fn(self, batch):
         batch_query_tag = []
@@ -154,7 +147,7 @@ class BiEncoderDataset(Dataset):
                 n=self.evidence_num - is_positive, random_state=self.rand_seed
             )["evidence"].tolist()
             negative_evid_textset = [
-                self.clean_text(neg_evidence, lower_case=self.lower_case)
+                clean_text(neg_evidence, lower_case=self.lower_case)
                 for neg_evidence in negative_evid_sample
             ]
 

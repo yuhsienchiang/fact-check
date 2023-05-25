@@ -17,6 +17,7 @@ class BiEncoderTrainer:
     def train(
         self,
         train_dataset: BiEncoderDataset = None,
+        top_k: int = 5,
         shuffle: bool = True,
         max_epoch: int = 10,
         loss_func_type: str = None,
@@ -24,8 +25,10 @@ class BiEncoderTrainer:
         learning_rate: float = 2e-5,
     ):
         # setup dataloader
-        self.shuffle = shuffle
         self.train_dataset = train_dataset
+        self.top_k = top_k
+        self.shuffle = shuffle
+        
 
         train_dataloader = DataLoader(
             self.train_dataset,
@@ -56,11 +59,13 @@ class BiEncoderTrainer:
             optimizer = torch.optim.SGD(self.model.parameters(), lr=self.learning_rate)
 
         # start training
-        self.train_loss_history = []
+        train_loss_history = []
+        train_f_score_history = []
         for epoch in range(max_epoch):
             print(f"Epoch {epoch+1}\n-------------------------------")
 
             batch_loss = []
+            batch_f_score = []
             batch_trained_sample = 0
             for index_batch, sample_batch in enumerate(train_dataloader):
                 # query inputs - reshape and move to gpu
@@ -92,7 +97,7 @@ class BiEncoderTrainer:
                 evid_vector = evid_vector.to(self.device)
 
                 # calculate the loss
-                loss = loss_func(
+                loss, avg_f_score = loss_func(
                     query_vector=query_vector,
                     evidence_vector=evid_vector,
                     is_positive=is_positive,
@@ -106,8 +111,9 @@ class BiEncoderTrainer:
                 batch_trained_sample += len(query_input_ids)
                 # print info and store history
                 if index_batch % 10 == 0 or batch_trained_sample == size:
-                    print(f"loss: {loss:>7f}  [{batch_trained_sample:>5d}/{size:>5d}]")
+                    print(f"loss: {loss:>7f}, f_score: {avg_f_score:>7f}  [{batch_trained_sample:>5d}/{size:>5d}]")
                     batch_loss.append(float(loss))
+                    batch_f_score.append(avg_f_score)
 
                 del (
                     query_input_ids,
@@ -118,7 +124,8 @@ class BiEncoderTrainer:
                     evid_vector,
                 )
 
-            self.train_loss_history.append(batch_loss)
+            train_loss_history.append(batch_loss)
+            train_f_score_history.append(batch_f_score)
             print()
 
         self.model.eval()
@@ -127,7 +134,7 @@ class BiEncoderTrainer:
             self.model.encoder_1.eval()
 
         print("Training Done!")
-        return self.train_loss_history
+        return {"loss": train_loss_history, "f_score": train_f_score_history}
 
     def select_loss_func(self, loss_func_type: str):
         if loss_func_type == "nll_loss":
@@ -173,13 +180,23 @@ class BiEncoderTrainer:
         ).to(self.device)
         # compute log softmax score
         log_softmax_score = -F.log_softmax(similarity_score, dim=-1).to(self.device)
+        
+        avg_f_score = 0.0
+        for positive_idx, score in zip(positive_mask, log_softmax_score):
+            max_idx = torch.topk(score, k=self.top_k, dim=-1).indices
+            correct_count = float((max_idx == positive_idx).sum())
+            recall = correct_count / float(torch.sum(positive_idx))
+            precision = correct_count / self.top_k
+            f_score = (2*recall*precision) / (recall + precision)
+            avg_f_score += f_score
+        avg_f_score /= self.batch_size
 
         positive_log_softmax_score = torch.sum(
             log_softmax_score * positive_mask, dim=-1
         )
 
         # return negative log likelihood of the positive evidences
-        return torch.mean(positive_log_softmax_score).to(self.device)
+        return torch.mean(positive_log_softmax_score).to(self.device), avg_f_score
 
     def create_positive_mask(self, is_positive, shape):
         mask = torch.zeros(shape)

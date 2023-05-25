@@ -1,12 +1,10 @@
-import json
-import pandas as pd
 import torch
 from torch.utils.data import Dataset
 import transformers
 from transformers import PreTrainedTokenizer, AutoTokenizer, BertTokenizer
 from collections import namedtuple
 
-from data.utils import load_data, class_label_conv
+from data.utils import load_data, class_label_conv, clean_text
 
 ClassifierSample = namedtuple(
     "ClassifierSample",
@@ -69,14 +67,14 @@ class ClassifierDataset(Dataset):
         data = self.claim_data.iloc[idx]
 
         query_tag = data["tag"]
-        query_text = self.clean_text(data["claim_text"])
+        query_text = clean_text(data["claim_text"])
         query_label = (
             class_label_conv(data["claim_label"]) if self.data_type == "train" else None
         )
 
         evidence_tag = data["evidence_tag"]
         evidence_text = [
-            self.clean_text(evid, lower_case=self.lower_case)
+            clean_text(evid, lower_case=self.lower_case)
             for evid in map(self.raw_evidence_data.get, evidence_tag)
         ]
 
@@ -98,9 +96,6 @@ class ClassifierDataset(Dataset):
         self.raw_evidence_data = raw_evidence_data
         self.claim_data = claim_data
         self.evidences_data = evidence_data
-
-    def clean_text(self, context: str, lower_case: bool = False) -> str:
-        return context.lower() if lower_case else context
 
     def train_collate_fn(self, batch):
         batch_text_sequence_input_ids = []

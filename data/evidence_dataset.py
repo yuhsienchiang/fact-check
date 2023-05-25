@@ -5,6 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
+from utils import clean_text
 
 EvidenceDataSample = namedtuple("EvidenceDataSample", ["tag", "evidence"])
 EvidenceDataPassage = namedtuple(
@@ -68,12 +69,6 @@ class EvidenceDataset(Dataset):
 
         self.evidence_data = pd.json_normalize(normalized_evidence_data)
 
-    def clean_text(self, context: str, lower_case: bool = False) -> str:
-        context = context.replace("`", "'")
-        context = context.replace(" 's", "'s")
-
-        return context.lower() if lower_case else context
-
     def evidence_collate_fn(self, batch):
         batch_evid_input_ids = []
         batch_evid_token_type_ids = []
@@ -86,7 +81,7 @@ class EvidenceDataset(Dataset):
             batch_evid_tag.append(evidence_tag)
 
             if self.data_type == "text":
-                evidence_text = self.clean_text(
+                evidence_text = clean_text(
                     batch_sample.evidence, lower_case=self.lower_case
                 )
                 evidence_encoding = self.tokenizer(
