@@ -1,7 +1,7 @@
 import json
 from transformers import AutoModel, AutoTokenizer
-from model.dpr.biencoder_dataset import BiEncoderDataset
-from model.dpr.evidence_dataset import EvidenceDataset
+from data.biencoder_dataset import BiEncoderDataset
+from data.evidence_dataset import EvidenceDataset
 from model.dpr.biencoder import BiEncoder
 from model.dpr.biencoder_trainer import BiEncoderTrainer
 
