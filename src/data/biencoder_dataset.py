@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
 
-from data.utils import load_data, clean_text
+from src.utils.utils import load_data, clean_text
 
 BiEncoderSample = namedtuple(
     "BiEncoderSample",

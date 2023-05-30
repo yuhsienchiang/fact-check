@@ -4,7 +4,7 @@ from torch import nn
 import transformers
 from transformers import BertModel
 
-from ...data.reranker_dataset import RerankerPassage
+from data.reranker_dataset import RerankerPassage
 
 
 class Reranker(nn.Module):

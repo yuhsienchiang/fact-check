@@ -4,7 +4,7 @@ import transformers
 from transformers import PreTrainedTokenizer, AutoTokenizer, BertTokenizer
 from collections import namedtuple
 
-from data.utils import load_data, class_label_conv, clean_text
+from src.utils.utils import load_data, class_label_conv, clean_text
 
 ClassifierSample = namedtuple(
     "ClassifierSample",

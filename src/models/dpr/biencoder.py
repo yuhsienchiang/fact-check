@@ -7,8 +7,8 @@ from torch import nn
 import torch.nn.functional as F
 from torch import Tensor as T
 from torch.utils.data import DataLoader
-from ...data.evidence_dataset import EvidenceDataset
-from ...data.biencoder_dataset import BiEncoderDataset
+from data.evidence_dataset import EvidenceDataset
+from data.biencoder_dataset import BiEncoderDataset
 
 
 class BiEncoder(nn.Module):
