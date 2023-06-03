@@ -1,85 +1,103 @@
 from transformers import AutoTokenizer
-
-from model.classifier.classifier import Classifier
+from utils.data_utils import load_config
+from models.classifier.classifier import Classifier
 from data.classifier_dataset import ClassifierDataset
-from model.classifier.classifier_trainer import ClassifierTrainer
-
+from models.classifier.classifier_trainer import ClassifierTrainer
 
 
 def run():
+    args = load_config("./config/classifier_config.yaml")
+    root_path = "../"
     
     # create tokenizer
     print("Create tokenizer...")
-    tokenizer = AutoTokenizer.from_pretrained("roberta-base", use_fast=False)
-    print('\033[1A', end='\x1b[2K')
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.dataset.tokenizer.type, use_fast=False
+    )
     print("Tokenizer created.")
 
     # Prepare dataset
     # Training dataset
     print("Load datasets...")
-    classifier_train_dataset = ClassifierDataset(claim_file_path="./data/train-claims.json",
-                                                     data_type="train",
-                                                     evidence_file_path="./data/evidence.json",
-                                                     tokenizer=tokenizer,
-                                                     lower_case=True,
-                                                     max_padding_length=512,
-                                                     rand_seed=666)
+    classifier_train_dataset = ClassifierDataset(
+        claim_file_path=root_path + args.dataset.train_dataset_path,
+        data_type="train",
+        evidence_file_path=root_path + args.dataset.evidence_dataset_path,
+        tokenizer=tokenizer,
+        lower_case=args.dataset.tokenizer.lower_case,
+        max_padding_length=args.dataset.tokenizer.token_length,
+        rand_seed=args.dataset.tokenizer.rand_seed,
+    )
     # Testing dataset
-    classifier_valid_train_dataset = ClassifierDataset(claim_file_path="./data/train-claims.json",
-                                                           data_type="predict",
-                                                           evidence_file_path="./data/output/retrieve-train-claims.json",
-                                                           tokenizer=tokenizer,
-                                                           lower_case=True,
-                                                           max_padding_length=512,
-                                                           rand_seed=666)
-    
-    classifier_valid_dev_dataset = ClassifierDataset(claim_file_path="./data/dev-claims.json",
-                                                           data_type="predict",
-                                                           evidence_file_path="./data/output/retrieve-dev-claims.json",
-                                                           tokenizer=tokenizer,
-                                                           lower_case=True,
-                                                           max_padding_length=512,
-                                                           rand_seed=666)
-    
-    classifier_test_dataset = ClassifierDataset(claim_file_path="./data/test-claims-unlabelled.json",
-                                                    data_type="predict",
-                                                    evidence_file_path="./data/output/retrieve-test-claims.json",
-                                                    tokenizer=tokenizer,
-                                                    lower_case=True,
-                                                    max_padding_length=512,
-                                                    rand_seed=666)
-    
+    classifier_valid_train_dataset = ClassifierDataset(
+        claim_file_path=root_path + args.dataset.train_dataset_path,
+        data_type="predict",
+        evidence_file_path=root_path + args.dataset.evidence_dataset_path,
+        tokenizer=tokenizer,
+        lower_case=args.dataset.tokenizer.lower_case,
+        max_padding_length=args.dataset.tokenizer.token_length,
+        rand_seed=args.dataset.tokenizer.rand_seed,
+    )
+
+    classifier_valid_dev_dataset = ClassifierDataset(
+        claim_file_path=root_path + args.dataset.dev_dataset_path,
+        data_type="predict",
+        evidence_file_path=root_path + args.dataset.evidence_dataset_path,
+        tokenizer=tokenizer,
+        lower_case=args.dataset.tokenizer.lower_case,
+        max_padding_length=args.dataset.tokenizer.token_length,
+        rand_seed=args.dataset.tokenizer.rand_seed,
+    )
+
+    classifier_test_dataset = ClassifierDataset(
+        claim_file_path=root_path + args.dataset.test_dataset_path,
+        data_type="predict",
+        evidence_file_path=args.dataset.evidence_dataset_path,
+        tokenizer=tokenizer,
+        lower_case=args.dataset.tokenizer.lower_case,
+        max_padding_length=args.dataset.tokenizer.token_length,
+        rand_seed=args.dataset.tokenizer.rand_seed,
+    )
+
     # create model
     print("Create Bert classifier")
-    classifier = Classifier(model_type="roberta-base")
+    classifier = Classifier(model_type=args.model.type)
     print("Bert classifier created.")
-    
+
     # train model
     print("Create model trainer.")
-    classifier_trainer = ClassifierTrainer(classifier,
-                                                    batch_size=4)
+    classifier_trainer = ClassifierTrainer(classifier, batch_size=args.train.batch_size)
 
     print("Training starts...")
-    classifier_trainer.train(train_dataset=classifier_train_dataset,
-                                  shuffle=True,
-                                  max_epoch=20,
-                                  loss_func_type="cross_entropy",
-                                  optimizer_type="adam",
-                                  learning_rate=1e-5)
-    
+    classifier_trainer.train(
+        train_dataset=classifier_train_dataset,
+        shuffle=args.train.shuffle,
+        max_epoch=args.train.epoch,
+        loss_func_type=args.train.loss_func,
+        optimizer_type=args.train.optimiser,
+        learning_rate=args.train.learning_rate,
+    )
+
     # Predict
     print("Start prediction...")
-    classification_valid_train_output= classifier.predict(classifier_valid_train_dataset,
-                                                               batch_size=4,
-                                                               output_file_path="./data/output/classify-dev-claims.json")
-    
-    classification_valid_dev_output= classifier.predict(classifier_valid_dev_dataset,
-                                                             batch_size=4,
-                                                             output_file_path="./data/output/classify-dev-claims.json")
-    
-    classification_test_output= classifier.predict(classifier_test_dataset,
-                                                        batch_size=4,
-                                                        output_file_path="./data/output/classify-test-claims.json")
-    
+    classification_valid_train_output = classifier.predict(
+        classifier_valid_train_dataset,
+        batch_size=args.predict.train.batch_size,
+        output_file_path=root_path + args.predict.train.output_path
+    )
+
+    classification_valid_dev_output = classifier.predict(
+        classifier_valid_dev_dataset,
+        batch_size=args.predict.dev.batch_size,
+        output_file_path=root_path + args.predict.dev.output_path
+    )
+
+    classification_test_output = classifier.predict(
+        classifier_test_dataset,
+        batch_size=args.predict.test.batch_size,
+        output_file_path=root_path + args.predict.test.output_path
+    )
+
+
 if __name__ == "__main__":
     run()

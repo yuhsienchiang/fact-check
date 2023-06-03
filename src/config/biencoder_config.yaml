@@ -1,0 +1,45 @@
+dataset:
+    train_dataset_path: "data/raw_data/train-claims.json"
+    dev_dataset_path: "data/raw_data/dev-claims.json"
+    test_dataset_path: "data/raw_data/test-claims-unlabelled.json"
+    evidence_dataset_path: "data/raw_data/evidence.json"
+    tokenizer:
+        type: "princeton-nlp/sup-simcse-roberta-base" 
+        token_length: 128
+        evidence_num: 8
+        lower_case: True
+        rand_seed: 666
+model:
+    query_encoder_type: "princeton-nlp/sup-simcse-roberta-base"
+    evidence_encoder_type: null
+    similarity_func: cosine
+    model_file: "models/dpr/biencoder.pt"
+train:
+    epoch: 40
+    batch_size: 8
+    shuffle: True
+    optimiser: adam
+    loss_func: nll
+    learning_rate: 1e-5
+gen_evid_embeds:
+    evidence_dataset_path: "data/raw_data/evidence.json"
+    output_path: "data/output/embed-evidence.json"
+    batch_size: 5
+retrieve:
+    train:
+        batch_size: 8
+        retrieve_num: 5
+        dataset_path: "data/raw_data/train-claims.json"
+        output_path: "data/output/retrieve-train-claims.json"
+    dev:
+        batch_size: 8
+        retrieve_num: 5
+        dataset_path: "data/raw_data/dev-claims.json"
+        output_path: "data/output/retrieve-dev-claims.json"
+    test:
+        batch_size: 8
+        retrieve_num: 5
+        dataset_path: "data/raw_data/test-claims-unlabelled.json"
+        output_path: "data/output/retrieve-test-claims.json"
+
+

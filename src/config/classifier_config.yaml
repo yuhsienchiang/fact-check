@@ -1,0 +1,36 @@
+dataset:
+    train_dataset_path: "data/raw_data/train-claims.json"
+    dev_dataset_path: "data/raw_data/dev-claims.json"
+    test_dataset_path: "data/raw_data/test-claims-unlabelled.json"
+    evidence_dataset_path: "data/raw_data/evidence.json"
+    tokenizer:
+        type: "roberta-base" 
+        token_length: 512
+        lower_case: True
+        rand_seed: 666
+model:
+    type: "roberta-base"
+    model_file: "models/classifier/classifier.pt"
+train:
+    epoch: 20
+    batch_size: 4
+    shuffle: True
+    optimiser: adam
+    loss_func: cross_entropy
+    learning_rate: 1e-5
+predict:
+    train:
+        batch_size: 8
+        dataset_path: "data/raw_data/train-claims.json"
+        output_path: "data/output/classify-train-claims.json"
+    dev:
+        batch_size: 8
+        dataset_path: "data/raw_data/dev-claims.json"
+        output_path: "data/output/classify-dev-claims.json"
+    test:
+        batch_size: 8
+        dataset_path: "data/raw_data/test-claims-unlabelled.json"
+        output_path: "data/output/classify-test-claims.json"
+
+
+
