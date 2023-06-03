@@ -5,7 +5,7 @@ import torch
 from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizer, AutoTokenizer
 from collections import namedtuple
-from utils import clean_text
+from utils.data_utils import clean_text
 
 EvidenceDataSample = namedtuple("EvidenceDataSample", ["tag", "evidence"])
 EvidenceDataPassage = namedtuple(

@@ -8,7 +8,7 @@ from torch import nn
 import transformers
 from transformers import AutoModel
 from data.classifier_dataset import ClassifierDataset
-from utils.utils import class_label_conv
+from utils.model_utils import class_label_conv
 
 
 class Classifier(nn.Module):
