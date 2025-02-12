@@ -17,6 +17,9 @@ data/output/simcse-cosine-simcse/
 data/output/simcse-cosine-roberta/
 
 .vscode
+.idea
+
+**/.DS_Store
 
 # Installer logs
 pip-log.txt

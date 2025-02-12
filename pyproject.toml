@@ -1,0 +1,28 @@
+[project]
+name = "fact-check"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "yuhsienchiang",email = "yuhsien.sam.chiang@gmail.com"}
+]
+readme = "README.md"
+requires-python = "3.12.9"
+dependencies = [
+    "transformers",
+    "torchvision",
+    "numpy",
+    "pandas",
+    "matplotlib",
+    "tqdm",
+    "notebook",
+    "pyyaml"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+
